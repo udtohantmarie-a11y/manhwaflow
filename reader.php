@@ -1,0 +1,906 @@
+<?php
+// reader.php - Dedicated Webtoon & Strip Reader
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/mangadex.php';
+require_once __DIR__ . '/includes/ads.php';
+$pdo = getPdo();
+
+$chapterId = isset($_GET['chapter_id']) ? intval($_GET['chapter_id']) : 0;
+$mdChapterId = trim($_GET['md_ch'] ?? '');
+$mdMangaId = trim($_GET['md_manga'] ?? '');
+$isLive = !empty($mdChapterId);
+
+$chapter = null;
+$pages = [];
+$allChapters = [];
+$prevChapter = null;
+$nextChapter = null;
+$backUrl = BASE_URL;
+
+if ($isLive) {
+    // --- LIVE MANGADEX STREAMING & FALLBACK ---
+    $manga = MangaDexAPI::getMangaDetailsLive($mdMangaId);
+    $liveChapters = MangaDexAPI::getChaptersLive($mdMangaId, 1000, $manga ? $manga['title'] : '');
+
+    $chNum = isset($_GET['ch_num']) ? floatval($_GET['ch_num']) : 1;
+    $chTitle = '';
+
+    // Find current chapter in list
+    foreach ($liveChapters as $index => $lc) {
+        if ($lc['id'] === $mdChapterId) {
+            $chNum = $lc['chapter_number'];
+            $chTitle = $lc['title'];
+            // Chapters are sorted ASC: index - 1 is Prev, index + 1 is Next
+            if (isset($liveChapters[$index - 1])) {
+                $prevChapter = $liveChapters[$index - 1];
+                $prevChapter['read_url'] = BASE_URL . "reader.php?md_ch=" . $prevChapter['id'] . "&md_manga=" . $mdMangaId . "&ch_num=" . $prevChapter['chapter_number'];
+            }
+            if (isset($liveChapters[$index + 1])) {
+                $nextChapter = $liveChapters[$index + 1];
+                $nextChapter['read_url'] = BASE_URL . "reader.php?md_ch=" . $nextChapter['id'] . "&md_manga=" . $mdMangaId . "&ch_num=" . $nextChapter['chapter_number'];
+            }
+            break;
+        }
+    }
+
+    $chapter = [
+        'id' => $mdChapterId,
+        'chapter_number' => $chNum,
+        'title' => $chTitle,
+        'manhwa_title' => $manga ? $manga['title'] : 'Manhwa',
+        'manhwa_id' => $mdMangaId,
+        'cover_image' => $manga ? $manga['cover_url'] : ''
+    ];
+    $backUrl = BASE_URL . "manhwa.php?md_id=" . $mdMangaId;
+
+    // Dropdown list (DESC order for convenience)
+    $descChapters = $liveChapters;
+    usort($descChapters, function($a, $b) {
+        return $b['chapter_number'] <=> $a['chapter_number'];
+    });
+    foreach ($descChapters as $dc) {
+        $dc['read_url'] = BASE_URL . "reader.php?md_ch=" . $dc['id'] . "&md_manga=" . $mdMangaId . "&ch_num=" . $dc['chapter_number'];
+        $dc['is_current'] = ($dc['id'] === $mdChapterId);
+        $allChapters[] = $dc;
+    }
+
+    // Fetch real pages from MangaDex @Home CDN
+    $pageUrls = MangaDexAPI::getChapterPagesLive($mdChapterId, true);
+    foreach ($pageUrls as $pIndex => $pUrl) {
+        $pages[] = [
+            'page_number' => $pIndex + 1,
+            'image_url' => $pUrl
+        ];
+    }
+
+} else {
+    // --- LOCAL DATABASE CHAPTER ---
+    if ($chapterId <= 0) {
+        header("Location: " . BASE_URL);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT c.*, m.title AS manhwa_title, m.slug AS manhwa_slug, m.id AS manhwa_id, m.cover_image
+        FROM `chapters` c
+        JOIN `manhwas` m ON c.manhwa_id = m.id
+        WHERE c.id = ?
+    ");
+    $stmt->execute([$chapterId]);
+    $chapter = $stmt->fetch();
+
+    if (!$chapter) {
+        die("Chapter not found. <a href='" . BASE_URL . "'>Return to Home</a>");
+    }
+
+    $backUrl = BASE_URL . "manhwa.php?id=" . $chapter['manhwa_id'];
+
+    // Increment local views
+    $pdo->prepare("UPDATE `chapters` SET views = views + 1 WHERE id = ?")->execute([$chapterId]);
+
+    // Fetch local pages
+    $pagesStmt = $pdo->prepare("
+        SELECT * FROM `chapter_pages` 
+        WHERE chapter_id = ? 
+        ORDER BY page_number ASC
+    ");
+    $pagesStmt->execute([$chapterId]);
+    $pages = $pagesStmt->fetchAll();
+
+    // Fetch local chapters
+    $allChaptersStmt = $pdo->prepare("
+        SELECT id, chapter_number, title 
+        FROM `chapters` 
+        WHERE manhwa_id = ? 
+        ORDER BY chapter_number DESC
+    ");
+    $allChaptersStmt->execute([$chapter['manhwa_id']]);
+    $localChapters = $allChaptersStmt->fetchAll();
+
+    foreach ($localChapters as $index => $ch) {
+        $ch['read_url'] = BASE_URL . "reader.php?chapter_id=" . $ch['id'];
+        $ch['is_current'] = ($ch['id'] == $chapterId);
+        $allChapters[] = $ch;
+
+        if ($ch['id'] == $chapterId) {
+            if (isset($localChapters[$index - 1])) {
+                $nextChapter = $localChapters[$index - 1];
+                $nextChapter['read_url'] = BASE_URL . "reader.php?chapter_id=" . $nextChapter['id'];
+            }
+            if (isset($localChapters[$index + 1])) {
+                $prevChapter = $localChapters[$index + 1];
+                $prevChapter['read_url'] = BASE_URL . "reader.php?chapter_id=" . $prevChapter['id'];
+            }
+        }
+    }
+}
+
+// Fetch Comments for this Chapter
+$commentsStmt = $pdo->prepare("
+    SELECT id, author_name, avatar, comment, likes, created_at 
+    FROM chapter_comments 
+    WHERE chapter_id = ? 
+    ORDER BY created_at DESC
+");
+$commentsStmt->execute([strval($chapter['id'])]);
+$chapterComments = $commentsStmt->fetchAll();
+
+// Auto-record in reading history table
+try {
+    $userId = $_SESSION['user_id'] ?? null;
+    $userToken = !empty($userId) ? 'user_' . $userId : ($_COOKIE['guest_reader_token'] ?? '');
+    if (empty($userToken)) {
+        $userToken = 'guest_' . bin2hex(random_bytes(16));
+        setcookie('guest_reader_token', $userToken, time() + (86400 * 365), '/');
+    }
+
+    $currentReadUrl = $isLive
+        ? (BASE_URL . "reader.php?md_ch=" . urlencode($chapter['id']) . "&md_manga=" . urlencode($chapter['manhwa_id']) . "&ch_num=" . urlencode($chapter['chapter_number']))
+        : (BASE_URL . "reader.php?chapter_id=" . intval($chapter['id']));
+
+    $stmtHist = $pdo->prepare("
+        INSERT INTO `reading_history` 
+            (`user_id`, `user_token`, `series_id`, `series_title`, `cover_image`, `chapter_id`, `chapter_number`, `chapter_title`, `read_url`, `scroll_percent`, `updated_at`)
+        VALUES 
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())
+        ON DUPLICATE KEY UPDATE 
+            `user_id` = VALUES(`user_id`),
+            `series_title` = VALUES(`series_title`),
+            `cover_image` = VALUES(`cover_image`),
+            `chapter_id` = VALUES(`chapter_id`),
+            `chapter_number` = VALUES(`chapter_number`),
+            `chapter_title` = VALUES(`chapter_title`),
+            `read_url` = VALUES(`read_url`),
+            `updated_at` = NOW()
+    ");
+    $stmtHist->execute([
+        $userId,
+        $userToken,
+        strval($chapter['manhwa_id']),
+        $chapter['manhwa_title'],
+        $chapter['cover_image'],
+        strval($chapter['id']),
+        floatval($chapter['chapter_number']),
+        $chapter['title'] ?: ('Chapter ' . $chapter['chapter_number']),
+        $currentReadUrl
+    ]);
+} catch (PDOException $e) {}
+
+$page_title = $chapter['manhwa_title'] . ' - Chapter ' . $chapter['chapter_number'];
+require_once __DIR__ . '/includes/header.php';
+?>
+
+<!-- Reading Progress Bar -->
+<div class="fixed top-16 left-0 right-0 h-1 bg-dark-900 z-50">
+    <div id="reading-progress" class="h-full bg-gradient-to-r from-brand-500 to-indigo-500 w-0"></div>
+</div>
+
+<!-- Screen Tap Visual Indicators (Left = Up, Right = Down) -->
+<div id="tap-indicator-left" class="fixed top-1/2 left-3 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 flex items-center justify-center w-12 h-12 rounded-full bg-brand-600/40 border border-brand-500/60 text-white text-lg backdrop-blur-md shadow-2xl scale-75">
+    <i class="fa-solid fa-chevron-up"></i>
+</div>
+<div id="tap-indicator-right" class="fixed top-1/2 right-3 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 flex items-center justify-center w-12 h-12 rounded-full bg-brand-600/40 border border-brand-500/60 text-white text-lg backdrop-blur-md shadow-2xl scale-75">
+    <i class="fa-solid fa-chevron-down"></i>
+</div>
+
+<!-- Floating Action Feedback Toast (Volume & Gestures) -->
+<div id="scroll-toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 bg-dark-900/95 backdrop-blur-md border border-dark-700/80 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
+    <span id="scroll-toast-icon" class="text-brand-400"><i class="fa-solid fa-arrow-up"></i></span>
+    <span id="scroll-toast-text">Scrolled Up</span>
+</div>
+
+<!-- Floating One-Hand Quick Scroll Buttons (Mobile & Desktop) -->
+<div id="floating-scroll-controls" class="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 transition-all duration-300">
+    <button onclick="scrollReader('up', 'Floating Button')" 
+            class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
+            title="Scroll Up (Pataas)">
+        <i class="fa-solid fa-chevron-up text-sm text-brand-400"></i>
+    </button>
+    <button onclick="scrollReader('down', 'Floating Button')" 
+            class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
+            title="Scroll Down (Pababa)">
+        <i class="fa-solid fa-chevron-down text-sm text-brand-400"></i>
+    </button>
+</div>
+
+<!-- Gestures & Controls Guide Modal -->
+<div id="gesture-guide-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-900 border border-dark-800 rounded-2xl max-w-sm w-full p-6 space-y-5 shadow-2xl animate-fadeIn">
+        <div class="flex items-center justify-between border-b border-dark-800 pb-3">
+            <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                <i class="fa-solid fa-mobile-screen-button text-brand-500"></i> Reading Controls &amp; Gestures
+            </h3>
+            <button onclick="closeGestureGuide()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="space-y-3 text-xs text-slate-300">
+            <div class="p-3 rounded-xl bg-dark-850 border border-dark-750 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-brand-600/20 text-brand-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-hand-pointer"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white">Screen Tap Zones</h4>
+                    <p class="text-slate-400 text-[11px] mt-0.5">
+                        &bull; <strong>Left side (35%):</strong> Scroll Up (Pataas)<br>
+                        &bull; <strong>Right side (35%):</strong> Scroll Down (Pababa)<br>
+                        &bull; <strong>Center area:</strong> Show / Hide Menu Bar
+                    </p>
+                </div>
+            </div>
+            <div class="p-3 rounded-xl bg-dark-850 border border-dark-750 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-volume-high"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white">Hardware Volume Keys</h4>
+                    <p class="text-slate-400 text-[11px] mt-0.5">
+                        &bull; <strong>Volume Up:</strong> Scroll Up (Pataas)<br>
+                        &bull; <strong>Volume Down:</strong> Scroll Down (Pababa)
+                    </p>
+                </div>
+            </div>
+            <div class="p-3 rounded-xl bg-dark-850 border border-dark-750 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-circle-chevron-down"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white">Floating Thumb Buttons</h4>
+                    <p class="text-slate-400 text-[11px] mt-0.5">
+                        Pindutin ang <strong>▲ at ▼ buttons</strong> sa ibaba para sa mabilis na one-hand thumb scrolling.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <button onclick="closeGestureGuide()" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs transition-colors shadow-lg shadow-brand-600/30">
+            Got it, Let's Read!
+        </button>
+    </div>
+</div>
+
+<div class="min-h-screen bg-black">
+
+    <!-- Sticky Reader Control Bar -->
+    <div id="reader-sticky-bar" class="sticky top-16 z-40 bg-dark-900/95 backdrop-blur-md border-b border-dark-800 shadow-md transition-all duration-300">
+        <div class="max-w-6xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+            
+            <!-- Left: Back to Manhwa details & Title -->
+            <div class="flex items-center gap-3">
+                <a href="<?= $backUrl ?>" 
+                   class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline">Back</span>
+                </a>
+                <div class="flex flex-col">
+                    <a href="<?= $backUrl ?>" class="font-bold text-white hover:text-brand-400 transition-colors line-clamp-1 max-w-[150px] sm:max-w-xs">
+                        <?= htmlspecialchars($chapter['manhwa_title']) ?>
+                    </a>
+                    <span class="text-[11px] text-slate-400">
+                        Chapter <?= $chapter['chapter_number'] ?><?= !empty($chapter['title']) ? ' - ' . htmlspecialchars($chapter['title']) : '' ?>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Center: Chapter Dropdown & Navigation -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <!-- Prev Button -->
+                <?php if ($prevChapter): ?>
+                    <a href="<?= $prevChapter['read_url'] ?>" 
+                       id="btn-prev-chapter"
+                       title="Previous Chapter (Left Arrow Key)"
+                       class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-brand-600 text-slate-300 hover:text-white transition-colors">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </a>
+                <?php else: ?>
+                    <button disabled class="px-2.5 py-1.5 rounded-lg bg-dark-850 text-slate-600 cursor-not-allowed">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                <?php endif; ?>
+
+                <!-- Chapter Selector Dropdown -->
+                <select id="chapter-select" 
+                        onchange="if(this.value) window.location.href=this.value"
+                        class="bg-dark-800 border border-dark-700 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-brand-500">
+                    <?php foreach ($allChapters as $cOption): ?>
+                        <option value="<?= $cOption['read_url'] ?>" <?= !empty($cOption['is_current']) ? 'selected' : '' ?>>
+                            Ch. <?= $cOption['chapter_number'] ?><?= !empty($cOption['title']) ? ' - ' . htmlspecialchars($cOption['title']) : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <!-- Next Button -->
+                <?php if ($nextChapter): ?>
+                    <a href="<?= $nextChapter['read_url'] ?>" 
+                       id="btn-next-chapter"
+                       title="Next Chapter (Right Arrow Key)"
+                       class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-brand-600 text-slate-300 hover:text-white transition-colors">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </a>
+                <?php else: ?>
+                    <button disabled class="px-2.5 py-1.5 rounded-lg bg-dark-850 text-slate-600 cursor-not-allowed">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                <?php endif; ?>
+            </div>
+
+            <!-- Right: Reader Width Controls, Gestures & Fullscreen -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <!-- Controls & Gesture Guide Button -->
+                <button onclick="openGestureGuide()" 
+                        class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-brand-400 hover:text-white transition-colors flex items-center gap-1 text-xs"
+                        title="Touch & Volume Gestures Guide">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span class="hidden sm:inline text-[11px] font-semibold text-slate-300">Controls</span>
+                </button>
+
+                <!-- Width Selector (Desktop) -->
+                <div class="hidden md:flex items-center bg-dark-800 p-0.5 rounded-lg border border-dark-700 text-xs">
+                    <button onclick="setReaderWidth('650px', this)" class="btn-width px-2 py-1 rounded text-slate-400 hover:text-white transition-colors" title="650px">S</button>
+                    <button onclick="setReaderWidth('800px', this)" class="btn-width px-2 py-1 rounded bg-dark-700 text-brand-400 font-bold transition-colors" title="800px">M</button>
+                    <button onclick="setReaderWidth('1000px', this)" class="btn-width px-2 py-1 rounded text-slate-400 hover:text-white transition-colors" title="1000px">L</button>
+                    <button onclick="setReaderWidth('100%', this)" class="btn-width px-2 py-1 rounded text-slate-400 hover:text-white transition-colors" title="Full Width">Full</button>
+                </div>
+
+                <!-- Fullscreen -->
+                <button onclick="toggleFullscreen()" class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors" title="Fullscreen (F)">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MAIN READER CANVAS / STRIP -->
+    <div class="py-4">
+        
+        <?php if (empty($pages)): ?>
+            <div class="max-w-md mx-auto my-20 p-8 rounded-2xl bg-dark-900 border border-dark-800 text-center space-y-4">
+                <div class="text-4xl text-slate-600"><i class="fa-solid fa-image"></i></div>
+                <h3 class="text-lg font-bold text-white">No pages available for this chapter</h3>
+                <p class="text-xs text-slate-400">This chapter has no published pages or is currently being processed.</p>
+                <a href="<?= $backUrl ?>" class="inline-block px-4 py-2 bg-brand-600 text-white rounded-lg text-xs font-bold">
+                    Return to Series
+                </a>
+            </div>
+        <?php else: ?>
+            <!-- Continuous Webtoon Strip Container -->
+            <div id="webtoon-strip" class="webtoon-strip-container shadow-2xl" style="max-width: 800px;">
+                <?php foreach ($pages as $p): ?>
+                    <div class="relative bg-black flex justify-center items-center">
+                        <img src="<?= htmlspecialchars($p['image_url']) ?>" 
+                             alt="Chapter <?= $chapter['chapter_number'] ?> - Page <?= $p['page_number'] ?>" 
+                             loading="lazy"
+                             decoding="async"
+                             class="w-full h-auto object-contain">
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Bottom Chapter Navigation Card -->
+        <div class="max-w-2xl mx-auto my-12 px-4">
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl">
+                <div class="w-12 h-12 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center mx-auto text-xl">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg sm:text-xl font-bold text-white">
+                        You've finished Chapter <?= $chapter['chapter_number'] ?>!
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">
+                        Thank you for reading <strong class="text-slate-200"><?= htmlspecialchars($chapter['manhwa_title']) ?></strong> on ManhwaFlow.
+                    </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    <?php if ($nextChapter): ?>
+                        <a href="<?= $nextChapter['read_url'] ?>" 
+                           class="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2 transition-all">
+                            <span>Next Chapter (Ch. <?= $nextChapter['chapter_number'] ?>)</span>
+                            <i class="fa-solid fa-arrow-right text-xs"></i>
+                        </a>
+                    <?php else: ?>
+                        <div class="px-5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-slate-400 text-xs font-semibold">
+                            You're at the latest chapter!
+                        </div>
+                    <?php endif; ?>
+
+                    <a href="<?= $backUrl ?>" 
+                       class="w-full sm:w-auto px-5 py-3 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-700 text-slate-300 hover:text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-list-ul"></i> Chapter List
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Non-Intrusive Bottom Ad Slot -->
+        <?php renderAdSlot('reader_bottom'); ?>
+
+        <!-- Chapter Discussion & Comments Section -->
+        <div id="comments-section" class="max-w-2xl mx-auto my-8 px-4">
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl">
+                <!-- Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-dark-800">
+                    <div class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-comments text-brand-500 text-lg"></i>
+                        <h3 class="text-base sm:text-lg font-bold text-white">Chapter Discussion</h3>
+                        <span id="comment-counter" class="px-2 py-0.5 rounded-full text-xs bg-dark-800 border border-dark-700 text-slate-300 font-semibold">
+                            <?= count($chapterComments) ?>
+                        </span>
+                    </div>
+                    <span class="text-xs text-slate-500">Ch. <?= $chapter['chapter_number'] ?></span>
+                </div>
+
+                <!-- Input Box -->
+                <?php if (isset($_SESSION['user_id'])): ?>
+                    <form id="comment-form" onsubmit="submitComment(event)" class="space-y-3">
+                        <input type="hidden" id="comment-ch-id" value="<?= htmlspecialchars($chapter['id']) ?>">
+                        <input type="hidden" id="comment-series-id" value="<?= htmlspecialchars($chapter['manhwa_id']) ?>">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                <?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
+                            </div>
+                            <div class="flex-1 space-y-2">
+                                <textarea id="comment-input" rows="3" required placeholder="Leave your thoughts, theories, or reaction on this chapter..."
+                                          class="w-full bg-dark-850 border border-dark-700 rounded-xl p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-all resize-none"></textarea>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[11px] text-slate-500">Posting as <strong class="text-slate-300"><?= htmlspecialchars($_SESSION['username']) ?></strong></span>
+                                    <button type="submit" id="btn-submit-comment"
+                                            class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-all shadow-md shadow-brand-600/20 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-paper-plane text-[10px]"></i> Post Comment
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <div class="p-4 rounded-xl bg-dark-850 border border-dark-750 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Join the Community Discussion</p>
+                            <p class="text-[11px] text-slate-400">Sign in to share your thoughts and react to this chapter.</p>
+                        </div>
+                        <a href="<?= BASE_URL ?>login.php?redirect=<?= urlencode($_SERVER['REQUEST_URI'] ?? '') ?>" 
+                           class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-all shadow-md shrink-0">
+                            Sign In to Comment
+                        </a>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Comments List -->
+                <div id="comments-list" class="space-y-3.5 pt-2">
+                    <?php if (empty($chapterComments)): ?>
+                        <div id="no-comments-msg" class="py-8 text-center text-slate-500 text-xs space-y-1">
+                            <i class="fa-regular fa-comment-dots text-2xl mb-1 text-slate-600"></i>
+                            <p>No comments on this chapter yet.</p>
+                            <p class="text-slate-400 font-medium">Be the first to share your reaction!</p>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($chapterComments as $cm): ?>
+                            <div class="comment-item p-4 rounded-xl bg-dark-850/70 border border-dark-800 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-7 h-7 rounded-full bg-dark-750 border border-dark-700 text-brand-400 flex items-center justify-center text-xs font-bold">
+                                            <?= strtoupper(substr($cm['author_name'], 0, 1)) ?>
+                                        </div>
+                                        <span class="text-xs font-bold text-white"><?= htmlspecialchars($cm['author_name']) ?></span>
+                                        <span class="text-[10px] text-slate-500"><?= date('M d, Y', strtotime($cm['created_at'])) ?></span>
+                                    </div>
+                                    <button onclick="likeComment(<?= $cm['id'] ?>, this)" class="btn-like flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-400 transition-colors">
+                                        <i class="fa-regular fa-heart"></i>
+                                        <span class="like-count"><?= $cm['likes'] ?></span>
+                                    </button>
+                                </div>
+                                <p class="text-xs sm:text-sm text-slate-200 leading-relaxed pl-9">
+                                    <?= nl2br(htmlspecialchars($cm['comment'])) ?>
+                                </p>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+// ==========================================
+// 1. Reading Progress Bar
+// ==========================================
+window.addEventListener('scroll', () => {
+    const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0;
+    const progressBar = document.getElementById('reading-progress');
+    if (progressBar) {
+        progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+    }
+}, { passive: true });
+
+// ==========================================
+// 2. Adjust Reader Width
+// ==========================================
+function setReaderWidth(width, btnEl) {
+    const strip = document.getElementById('webtoon-strip');
+    if (strip) {
+        strip.style.maxWidth = width;
+    }
+    document.querySelectorAll('.btn-width').forEach(b => {
+        b.classList.remove('bg-dark-700', 'text-brand-400', 'font-bold');
+        b.classList.add('text-slate-400');
+    });
+    if (btnEl) {
+        btnEl.classList.remove('text-slate-400');
+        btnEl.classList.add('bg-dark-700', 'text-brand-400', 'font-bold');
+    }
+}
+
+// ==========================================
+// 3. Fullscreen Toggle
+// ==========================================
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {});
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+// ==========================================
+// 4. Smooth Reader Scroll (Pataas & Pababa)
+// ==========================================
+function scrollReader(direction, source = '') {
+    const scrollAmount = Math.floor(window.innerHeight * 0.75);
+    if (direction === 'up') {
+        window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
+        showTapIndicator('up');
+        if (source) showScrollToast('Scroll Up (Pataas)', 'fa-chevron-up');
+    } else {
+        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        showTapIndicator('down');
+        if (source) showScrollToast('Scroll Down (Pababa)', 'fa-chevron-down');
+    }
+}
+
+// Visual Tap Indicator on screen edges
+let tapIndicatorTimer = null;
+function showTapIndicator(direction) {
+    const indLeft = document.getElementById('tap-indicator-left');
+    const indRight = document.getElementById('tap-indicator-right');
+    if (!indLeft || !indRight) return;
+
+    indLeft.classList.remove('opacity-100', 'scale-100');
+    indLeft.classList.add('opacity-0', 'scale-75');
+    indRight.classList.remove('opacity-100', 'scale-100');
+    indRight.classList.add('opacity-0', 'scale-75');
+
+    const targetEl = (direction === 'up' || direction === 'left') ? indLeft : indRight;
+    targetEl.classList.remove('opacity-0', 'scale-75');
+    targetEl.classList.add('opacity-100', 'scale-100');
+
+    clearTimeout(tapIndicatorTimer);
+    tapIndicatorTimer = setTimeout(() => {
+        targetEl.classList.remove('opacity-100', 'scale-100');
+        targetEl.classList.add('opacity-0', 'scale-75');
+    }, 280);
+}
+
+// Visual Feedback Toast
+let scrollToastTimer = null;
+function showScrollToast(text, iconClass = 'fa-chevron-up') {
+    const toast = document.getElementById('scroll-toast');
+    const toastText = document.getElementById('scroll-toast-text');
+    const toastIcon = document.getElementById('scroll-toast-icon');
+    if (!toast || !toastText) return;
+
+    toastText.textContent = text;
+    if (toastIcon) {
+        toastIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+    }
+
+    toast.classList.remove('opacity-0', '-translate-y-2');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    clearTimeout(scrollToastTimer);
+    scrollToastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+    }, 850);
+}
+
+// Distraction-free header toggle
+function toggleReaderHeader() {
+    const header = document.getElementById('reader-sticky-bar');
+    if (!header) return;
+    const isHidden = header.classList.toggle('-translate-y-full');
+    showScrollToast(isHidden ? 'Menu Hidden' : 'Menu Shown', isHidden ? 'fa-eye-slash' : 'fa-eye');
+}
+
+// Gestures guide modal
+function openGestureGuide() {
+    const modal = document.getElementById('gesture-guide-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeGestureGuide() {
+    const modal = document.getElementById('gesture-guide-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// ==========================================
+// 5. Screen Tap Zones (Left = Up, Right = Down, Center = Menu)
+// ==========================================
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+
+window.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+}, { passive: true });
+
+window.addEventListener('touchend', (e) => {
+    if (e.changedTouches.length !== 1) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const duration = Date.now() - touchStartTime;
+    const diffX = Math.abs(touchEndX - touchStartX);
+    const diffY = Math.abs(touchEndY - touchStartY);
+
+    // If dragged/swiped more than 15px or held longer than 350ms, it's a drag/swipe NOT a tap
+    if (diffX > 15 || diffY > 15 || duration > 350) return;
+
+    // Do not trigger tap-scroll when user clicks buttons, links, inputs, or comments
+    const target = e.target;
+    if (target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls, .btn-like, form')) {
+        return;
+    }
+
+    handleScreenTap(touchEndX);
+}, { passive: true });
+
+function handleScreenTap(clientX) {
+    const screenWidth = window.innerWidth;
+    const leftBoundary = screenWidth * 0.35;   // Left 35% -> Pataas (Up)
+    const rightBoundary = screenWidth * 0.65;  // Right 35% -> Pababa (Down)
+
+    if (clientX < leftBoundary) {
+        scrollReader('up', 'Tap Up');
+    } else if (clientX > rightBoundary) {
+        scrollReader('down', 'Tap Down');
+    } else {
+        toggleReaderHeader();
+    }
+}
+
+// Optional desktop click on reader container
+const webtoonContainer = document.getElementById('webtoon-strip');
+if (webtoonContainer) {
+    webtoonContainer.addEventListener('click', (e) => {
+        if (e.pointerType === 'touch') return; // Handled by touch events
+        if (e.target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls')) {
+            return;
+        }
+        handleScreenTap(e.clientX);
+    });
+}
+
+// ==========================================
+// 6. Hardware Volume Keys & Keyboard Navigation
+// ==========================================
+document.addEventListener('keydown', (e) => {
+    // Avoid triggering when user is in input or select
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+    // A. Phone Hardware Volume Keys
+    const isVolumeUp = e.key === 'VolumeUp' || 
+                       e.key === 'AudioVolumeUp' || 
+                       e.code === 'AudioVolumeUp' || 
+                       e.code === 'VolumeUp' || 
+                       e.keyCode === 175 || 
+                       e.keyCode === 24;
+
+    const isVolumeDown = e.key === 'VolumeDown' || 
+                         e.key === 'AudioVolumeDown' || 
+                         e.code === 'AudioVolumeDown' || 
+                         e.code === 'VolumeDown' || 
+                         e.keyCode === 174 || 
+                         e.keyCode === 25;
+
+    if (isVolumeUp) {
+        e.preventDefault();
+        scrollReader('up', 'Volume Up');
+        return;
+    }
+
+    if (isVolumeDown) {
+        e.preventDefault();
+        scrollReader('down', 'Volume Down');
+        return;
+    }
+
+    // B. Desktop Keyboard Navigation
+    if (e.key === 'ArrowLeft') {
+        const prevBtn = document.getElementById('btn-prev-chapter');
+        if (prevBtn) prevBtn.click();
+    } else if (e.key === 'ArrowRight') {
+        const nextBtn = document.getElementById('btn-next-chapter');
+        if (nextBtn) nextBtn.click();
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        scrollReader('up', 'Key Up');
+    } else if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        scrollReader('down', 'Key Down');
+    } else if (e.key === ' ' && !e.shiftKey) {
+        e.preventDefault();
+        scrollReader('down', 'Space');
+    } else if (e.key === ' ' && e.shiftKey) {
+        e.preventDefault();
+        scrollReader('up', 'Shift + Space');
+    } else if (e.key.toLowerCase() === 'f') {
+        toggleFullscreen();
+    } else if (e.key.toLowerCase() === 'm') {
+        toggleReaderHeader();
+    }
+});
+
+// 5. Submit Chapter Comment
+async function submitComment(e) {
+    e.preventDefault();
+    const input = document.getElementById('comment-input');
+    const chId = document.getElementById('comment-ch-id')?.value;
+    const sId = document.getElementById('comment-series-id')?.value;
+    const btn = document.getElementById('btn-submit-comment');
+    const text = input ? input.value.trim() : '';
+    if (!text || !chId) return;
+
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch('<?= BASE_URL ?>api/comments.php?action=add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chapter_id: chId, series_id: sId, comment: text })
+        });
+        const data = await res.json();
+        if (data.success && data.comment) {
+            input.value = '';
+            const noMsg = document.getElementById('no-comments-msg');
+            if (noMsg) noMsg.remove();
+
+            const list = document.getElementById('comments-list');
+            const newCard = document.createElement('div');
+            newCard.className = 'comment-item p-4 rounded-xl bg-dark-850/70 border border-dark-800 space-y-2 animate-fadeIn';
+            newCard.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded-full bg-brand-600/30 border border-brand-500/40 text-brand-400 flex items-center justify-center text-xs font-bold">
+                            ${data.comment.author_name.charAt(0).toUpperCase()}
+                        </div>
+                        <span class="text-xs font-bold text-white">${data.comment.author_name}</span>
+                        <span class="text-[10px] text-slate-500">Just now</span>
+                    </div>
+                    <button onclick="likeComment(${data.comment.id}, this)" class="btn-like flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-400 transition-colors">
+                        <i class="fa-regular fa-heart"></i>
+                        <span class="like-count">0</span>
+                    </button>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-200 leading-relaxed pl-9">
+                    ${data.comment.comment}
+                </p>
+            `;
+            if (list) list.prepend(newCard);
+
+            const counter = document.getElementById('comment-counter');
+            if (counter) counter.textContent = data.count;
+        } else if (data.auth_required) {
+            alert(data.message || 'Please log in to leave a comment.');
+            window.location.href = '<?= BASE_URL ?>login.php?redirect=' + encodeURIComponent(window.location.href);
+        } else {
+            alert(data.message || 'Could not post comment.');
+        }
+    } catch (err) {
+        alert('Network error while posting comment.');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+// 6. Like Comment
+async function likeComment(commentId, btnEl) {
+    if (!commentId || !btnEl) return;
+    try {
+        const res = await fetch('<?= BASE_URL ?>api/comments.php?action=like', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'comment_id=' + commentId
+        });
+        const data = await res.json();
+        if (data.success) {
+            const countEl = btnEl.querySelector('.like-count');
+            if (countEl) countEl.textContent = data.likes;
+            const icon = btnEl.querySelector('i');
+            if (icon) {
+                icon.classList.remove('fa-regular');
+                icon.classList.add('fa-solid', 'text-rose-500');
+            }
+        }
+    } catch (err) {}
+}
+
+// ==========================================
+// 7. Reading History Sync (LocalStorage & Position)
+// ==========================================
+(function() {
+    try {
+        const histData = {
+            series_id: <?= json_encode(strval($chapter['manhwa_id'])) ?>,
+            series_title: <?= json_encode($chapter['manhwa_title']) ?>,
+            cover_image: <?= json_encode($chapter['cover_image']) ?>,
+            chapter_id: <?= json_encode(strval($chapter['id'])) ?>,
+            chapter_number: <?= json_encode(floatval($chapter['chapter_number'])) ?>,
+            chapter_title: <?= json_encode($chapter['title'] ?: ('Chapter ' . $chapter['chapter_number'])) ?>,
+            read_url: window.location.href,
+            scroll_percent: 0,
+            updated_at: Date.now()
+        };
+        const allHist = JSON.parse(localStorage.getItem('manhwaflow_history') || localStorage.getItem('manhwaverse_history') || '{}');
+        allHist[histData.series_id] = histData;
+        localStorage.setItem('manhwaflow_history', JSON.stringify(allHist));
+    } catch(e) {}
+})();
+
+// ==========================================
+// 8. Auto-claim Chapter Reading Flow Coins
+// ==========================================
+(async function() {
+    try {
+        const chapterId = <?= json_encode(strval($chapter['id'])) ?>;
+        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=read_chapter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'chapter_id=' + encodeURIComponent(chapterId)
+        });
+        const data = await res.json();
+        if (data.success && data.awarded) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-5 right-5 z-50 bg-dark-900 border border-amber-500/60 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold transition-all';
+            toast.innerHTML = `<i class="fa-solid fa-coins text-amber-400 text-sm animate-bounce"></i> <span>+${data.earned_coins} Flow Coins Earned!</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 400);
+            }, 3500);
+        }
+    } catch(e) {}
+})();
+</script>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
+
