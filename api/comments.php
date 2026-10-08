@@ -56,7 +56,7 @@ if ($action === 'add') {
     // Rate limit comments per user
     $cLimit = checkRateLimit('comment_' . $userId, 10, 60);
     if (!$cLimit['allowed']) {
-        echo json_encode(['success' => false, 'message' => 'Masyadong mabilis ang pag-comment. Maghintay sandali bago mag-post muli.']);
+        echo json_encode(['success' => false, 'message' => 'You are posting comments too quickly. Please wait a moment before trying again.']);
         exit;
     }
 

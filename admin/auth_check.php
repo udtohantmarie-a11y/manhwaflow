@@ -42,14 +42,14 @@ if ($userRole !== 'admin') {
                 </div>
                 <h1 class='text-xl font-bold text-white'>403 - Access Denied</h1>
                 <p class='text-xs text-slate-400 leading-relaxed'>
-                    Wala kang pahintulot na buksan ang Admin Panel ng ManhwaFlow. Ang bahaging ito ay nakalaan lamang para sa Administrators.
+                    You do not have permission to access the ManhwaFlow Admin Control Center. This area is reserved for administrators only.
                 </p>
                 <div class='pt-2 flex justify-center gap-3'>
                     <a href='" . BASE_URL . "' class='px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold'>
-                        Bumalik sa Home
+                        Return to Home
                     </a>
                     <a href='" . BASE_URL . "logout.php' class='px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold'>
-                        Mag-log out
+                        Sign Out
                     </a>
                 </div>
             </div>
@@ -57,4 +57,3 @@ if ($userRole !== 'admin') {
         </html>");
     }
 }
-

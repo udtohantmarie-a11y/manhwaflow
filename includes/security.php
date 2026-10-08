@@ -50,8 +50,8 @@ function requireCsrf() {
         } else {
             die("<div style='background:#18181b;color:#f87171;padding:24px;font-family:sans-serif;max-width:500px;margin:50px auto;border-radius:12px;border:1px solid #dc2626;'>
                     <h3 style='margin-top:0;'>⚠️ Security Error (CSRF Token Mismatch)</h3>
-                    <p style='color:#e2e8f0;font-size:14px;'>Na-expire o hindi tugma ang security token. Mangyaring i-refresh ang page at subukan muli.</p>
-                    <a href='javascript:history.back()' style='display:inline-block;margin-top:10px;padding:8px 16px;background:#3b82f6;color:white;text-decoration:none;border-radius:6px;font-size:13px;'>Bumalik</a>
+                    <p style='color:#e2e8f0;font-size:14px;'>Security token has expired or is invalid. Please refresh the page and try again.</p>
+                    <a href='javascript:history.back()' style='display:inline-block;margin-top:10px;padding:8px 16px;background:#3b82f6;color:white;text-decoration:none;border-radius:6px;font-size:13px;'>Go Back</a>
                  </div>");
         }
         exit;
@@ -91,7 +91,7 @@ function checkRateLimit($actionKey, $maxAttempts = 5, $decaySeconds = 300) {
         $minutes = ceil($remainingSeconds / 60);
         return [
             'allowed' => false,
-            'message' => "Masyadong maraming pagsubok (Rate limit exceeded). Subukan muli pagkalipas ng {$minutes} minuto."
+            'message' => "Too many attempts (Rate limit exceeded). Please try again in {$minutes} minute(s)."
         ];
     }
 

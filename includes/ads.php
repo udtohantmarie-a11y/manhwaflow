@@ -1,12 +1,12 @@
 <?php
 // includes/ads.php - Clean & Non-Intrusive Monetization for ManhwaFlow
 
-// Naka-enable na ang ads gamit ang Monetag Direct Link
+// Enable monetization with Monetag Direct Link
 if (!defined('ADS_ENABLED')) {
     define('ADS_ENABLED', true);
 }
 
-// Ang iyong Monetag Direct Link
+// Your Monetag Direct Link
 if (!defined('MONETAG_DIRECT_LINK')) {
     define('MONETAG_DIRECT_LINK', 'https://uplcm.com/4/11983803');
 }

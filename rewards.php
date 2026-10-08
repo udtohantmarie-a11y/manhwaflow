@@ -69,7 +69,7 @@ $rankData = calcRank($totalEarned);
                     Read Webtoons. Earn Coins. <span class="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">Get GCash!</span>
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-                    Araw-araw na magbasa ng paborito mong manhwa, tapusin ang daily quests, at i-redeem ang naipong coins sa totoong GCash, Maya, o Regular Load.
+                    Read your favorite manhwas daily, complete daily quests, and redeem your coins for real GCash, Maya, or Prepaid Mobile Load.
                 </p>
             </div>
 
@@ -94,7 +94,7 @@ $rankData = calcRank($totalEarned);
             <?php else: ?>
                 <div class="bg-dark-900/90 border border-brand-500/40 rounded-2xl p-5 text-center shrink-0 space-y-3 max-w-xs">
                     <h3 class="text-sm font-bold text-white">Start Earning Today</h3>
-                    <p class="text-xs text-slate-400">Mag-sign in o gumawa ng account para ma-save ang iyong coins at makapag-cashout.</p>
+                    <p class="text-xs text-slate-400">Sign in or create an account to start earning Flow Coins and cash out rewards.</p>
                     <div class="flex gap-2">
                         <a href="<?= BASE_URL ?>login.php" class="flex-1 py-2 rounded-xl bg-dark-800 text-xs font-semibold text-white hover:bg-dark-750">Log In</a>
                         <a href="<?= BASE_URL ?>register.php" class="flex-1 py-2 rounded-xl bg-brand-600 text-xs font-bold text-white hover:bg-brand-500 shadow-lg shadow-brand-600/30">Sign Up</a>
@@ -111,7 +111,7 @@ $rankData = calcRank($totalEarned);
                 <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-calendar-check text-brand-400"></i> 7-Day Login Streak Bonus
                 </h2>
-                <p class="text-xs text-slate-400">Bumisita araw-araw para tumaas ang streak bonus coins mo!</p>
+                <p class="text-xs text-slate-400">Visit daily to increase your streak multiplier and earn bonus coins!</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span class="text-slate-400">Current Streak:</span>
@@ -164,7 +164,7 @@ $rankData = calcRank($totalEarned);
                 <?php else: ?>
                     <button disabled class="px-6 py-3 rounded-xl bg-dark-850 border border-dark-750 text-slate-500 font-bold text-sm cursor-not-allowed inline-flex items-center gap-2">
                         <i class="fa-solid fa-circle-check text-emerald-500"></i>
-                        <span>Checked In Today! (Balik ulit bukas)</span>
+                        <span>Checked In Today! (Come back tomorrow)</span>
                     </button>
                 <?php endif; ?>
             <?php else: ?>
@@ -181,12 +181,12 @@ $rankData = calcRank($totalEarned);
             <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                 <i class="fa-solid fa-bullseye text-brand-400"></i> Daily Quests &amp; Tasks
             </h2>
-            <p class="text-xs text-slate-400">Kumpletuhin ang mga sumusunod para sa dagdag na coins araw-araw!</p>
+            <p class="text-xs text-slate-400">Complete tasks daily to earn extra Flow Coins!</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             
-            <!-- Quest 1: Daily Sponsor Exploration (Monetag Monetization Engine) -->
+            <!-- Quest 1: Daily Sponsor Exploration -->
             <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-5 space-y-4 relative overflow-hidden shadow-xl group">
                 <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-brand-500/10 rounded-full blur-xl pointer-events-none"></div>
                 <div class="flex items-start justify-between gap-3">
@@ -200,7 +200,7 @@ $rankData = calcRank($totalEarned);
                 <div>
                     <h3 class="text-sm font-bold text-white group-hover:text-brand-300 transition-colors">Daily Sponsor Bonus</h3>
                     <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Tingnan ang alok ng aming partner games at services para suportahan ang servers ng ManhwaFlow.
+                        Check out our partner games and services to support ManhwaFlow hosting and earn bonus coins.
                     </p>
                 </div>
                 <div>
@@ -237,7 +237,7 @@ $rankData = calcRank($totalEarned);
                 <div>
                     <h3 class="text-sm font-bold text-white">Read Comic Chapters</h3>
                     <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Awtomatikong binibigyan ng +5 coins ang account mo tuwing matatapos mo ang isang chapter sa reader!
+                        Automatically get +5 coins credited to your account every time you complete reading a chapter in the reader!
                     </p>
                 </div>
                 <div>
@@ -260,7 +260,7 @@ $rankData = calcRank($totalEarned);
                 <div>
                     <h3 class="text-sm font-bold text-white">Join Discussions</h3>
                     <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Mag-comment sa dulo ng bawat chapter para makipag-bonding sa ibang manhwa fans at ipakita ang iyong Hunter rank!
+                        Leave your thoughts, theories, and comments at the bottom of chapters to connect with other fans and level up!
                     </p>
                 </div>
                 <div>
@@ -279,9 +279,9 @@ $rankData = calcRank($totalEarned);
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-dark-800">
             <div>
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-wallet text-emerald-400"></i> Payout Settings (Saan Ipadadala ang Pera)
+                    <i class="fa-solid fa-wallet text-emerald-400"></i> Payout Settings (Where to Send Cashouts)
                 </h3>
-                <p class="text-xs text-slate-400">I-set up ang iyong GCash o Maya details para automatic nang naka-ready tuwing mag-re-redeem ka.</p>
+                <p class="text-xs text-slate-400">Save your default GCash or Maya details to automatically pre-fill future redemption requests.</p>
             </div>
             <div>
                 <?php if (!empty($defaultNumber)): ?>
@@ -290,7 +290,7 @@ $rankData = calcRank($totalEarned);
                     </span>
                 <?php else: ?>
                     <span id="payout-status-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
-                        <i class="fa-solid fa-circle-exclamation text-[10px]"></i> I-set up ang iyong GCash dito
+                        <i class="fa-solid fa-circle-exclamation text-[10px]"></i> Set up your payout details here
                     </span>
                 <?php endif; ?>
             </div>
@@ -332,7 +332,7 @@ $rankData = calcRank($totalEarned);
                 <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-money-bill-wave text-emerald-400"></i> GCash &amp; Load Redeem Store
                 </h2>
-                <p class="text-xs text-slate-400">Ipalit ang iyong naipong coins sa totoong pera! Minimum cashout ay 2,500 coins (₱10).</p>
+                <p class="text-xs text-slate-400">Redeem your accumulated Flow Coins for real cash! Minimum cashout is 2,500 coins (₱10.00).</p>
             </div>
             <div class="text-xs text-slate-400">
                 Processing time: <strong class="text-emerald-400">24-48 Hours</strong>
@@ -507,8 +507,8 @@ $rankData = calcRank($totalEarned);
             <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-xl mb-3">
                 <i class="fa-solid fa-wallet"></i>
             </div>
-            <h3 class="text-xl font-black text-white">Redeem GCash / Load</h3>
-            <p class="text-xs text-slate-400">Punan ang detalye kung saan ipapadala ang iyong bayad.</p>
+            <h3 class="text-xl font-black text-white">Redeem GCash / Maya</h3>
+            <p class="text-xs text-slate-400">Enter the account details where your payout will be sent.</p>
         </div>
 
         <div class="bg-dark-850 rounded-2xl p-4 flex items-center justify-between border border-dark-800">
@@ -568,7 +568,7 @@ async function claimCheckin() {
             window.location.reload();
         }
     } catch(e) {
-        alert('Nagkaroon ng problema. Subukan muli.');
+        alert('Something went wrong. Please try again.');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -591,7 +591,7 @@ async function claimSponsorQuest() {
             alert(data.message);
         }
     } catch(e) {
-        alert('Nagkaroon ng problema. Subukan muli.');
+        alert('Something went wrong. Please try again.');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -628,7 +628,7 @@ async function savePayoutSettings(e) {
             window.location.reload();
         }
     } catch(err) {
-        alert('Nagkaroon ng problema sa pag-save.');
+        alert('Problem saving settings. Please try again.');
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -641,7 +641,7 @@ async function savePayoutSettings(e) {
 function openRedeemModal(amount, coins) {
     const userCoins = <?= $coins ?>;
     if (userCoins < coins) {
-        alert(`Kulang pa ang iyong coins! Kailangan mo ng ${coins.toLocaleString()} coins para sa ₱${amount}.`);
+        alert(`Insufficient coins! You need ${coins.toLocaleString()} coins for ₱${amount}.00.`);
         return;
     }
     document.getElementById('payout-amount').value = amount;
@@ -695,7 +695,7 @@ async function submitPayout(e) {
             window.location.reload();
         }
     } catch(err) {
-        alert('Nagkaroon ng error sa pagsusumite.');
+        alert('Network error while submitting payout request.');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Confirm Cashout Request';

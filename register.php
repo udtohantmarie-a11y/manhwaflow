@@ -27,22 +27,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $confirmPassword = $_POST['confirm_password'] ?? '';
 
         if (empty($username) || empty($email) || empty($password)) {
-            $error = 'Paki-fill up ang lahat ng fields.';
+            $error = 'Please fill in all fields.';
         } elseif (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $username)) {
-            $error = 'Ang username ay dapat 3 hanggang 20 characters lamang (letters, numbers, at underscore _ lamang ang pwede).';
+            $error = 'Username must be 3 to 20 characters (letters, numbers, and underscores only).';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $error = 'Pakilagay ang wastong email address.';
+            $error = 'Please enter a valid email address.';
         } elseif (strlen($password) < 6) {
-            $error = 'Ang password ay dapat mayroong hindi bababa sa 6 characters.';
+            $error = 'Password must be at least 6 characters long.';
         } elseif ($password !== $confirmPassword) {
-            $error = 'Hindi magkatugma ang kumpirmasyon ng password.';
+            $error = 'Passwords do not match.';
         } else {
             // Check if username or email already exists
             $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
             $checkStmt->execute([$username, $email]);
             if ($checkStmt->fetch()) {
                 recordFailedAttempt('register', 5, 300);
-                $error = 'Mayroon nang account gamit ang username o email na ito.';
+                $error = 'An account with this username or email already exists.';
             } else {
                 $hashed = password_hash($password, PASSWORD_DEFAULT);
                 $insert = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'user')");

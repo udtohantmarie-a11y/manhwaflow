@@ -60,7 +60,7 @@ if (!$userId) {
         echo json_encode([
             'success' => false,
             'requires_login' => true,
-            'message' => 'Kailangan naka-sign in ka para mag-ipon ng coins at mag-cashout!'
+            'message' => 'Please sign in to earn coins and request cashouts!'
         ]);
         exit;
     }
@@ -95,7 +95,7 @@ if ($action === 'get_status') {
 // --- 2. DAILY CHECK-IN ---
 if ($action === 'checkin') {
     if ($rewards['last_checkin_date'] === $today) {
-        echo json_encode(['success' => false, 'message' => 'Naka-check in ka na ngayong araw! Bumalik ulit bukas para sa susunod na reward.']);
+        echo json_encode(['success' => false, 'message' => 'You have already checked in today! Come back tomorrow for your next reward.']);
         exit;
     }
 
@@ -129,7 +129,7 @@ if ($action === 'checkin') {
         'earned_coins' => $earnedCoins,
         'coins' => intval($newRow['coins']),
         'streak_days' => $newStreak,
-        'message' => "Matagumpay mong nakuha ang Day {$newStreak} reward na +{$earnedCoins} Flow Coins!"
+        'message' => "Successfully claimed Day {$newStreak} reward of +{$earnedCoins} Flow Coins!"
     ]);
     exit;
 }
@@ -151,7 +151,7 @@ if ($action === 'read_chapter') {
             'awarded' => false,
             'already_claimed' => true,
             'coins' => intval($rewards['coins']),
-            'message' => 'Nakuha mo na ang coins reward para sa kabanatang ito.'
+            'message' => 'You have already claimed your coin reward for this chapter.'
         ]);
         exit;
     }
@@ -189,7 +189,7 @@ if ($action === 'read_chapter') {
         'awarded' => true,
         'earned_coins' => $earnedCoins,
         'coins' => intval($newRow['coins']),
-        'message' => "+{$earnedCoins} Coins para sa pagtatapos ng chapter!"
+        'message' => "+{$earnedCoins} Flow Coins earned for completing this chapter!"
     ]);
     exit;
 }
@@ -199,7 +199,7 @@ if ($action === 'sponsor_quest') {
     if ($rewards['last_sponsor_date'] === $today) {
         echo json_encode([
             'success' => false, 
-            'message' => 'Nakuha mo na ang Daily Sponsor Bonus ngayong araw! Bumalik bukas para sa panibagong +50 coins.'
+            'message' => 'You have already claimed your Daily Sponsor Bonus today! Come back tomorrow for another +50 coins.'
         ]);
         exit;
     }
@@ -223,7 +223,7 @@ if ($action === 'sponsor_quest') {
         'earned_coins' => $earnedCoins,
         'coins' => intval($newRow['coins']),
         'sponsor_url' => 'https://uplcm.com/4/11983803',
-        'message' => "+{$earnedCoins} Flow Coins ang naidagdag sa iyong balance!"
+        'message' => "+{$earnedCoins} Flow Coins added to your balance!"
     ]);
     exit;
 }
@@ -232,7 +232,7 @@ if ($action === 'sponsor_quest') {
 if ($action === 'request_payout') {
     $csrf = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
     if (!verifyCsrfToken($csrf)) {
-        echo json_encode(['success' => false, 'message' => 'Security token invalid o na-expire. Mangyaring i-refresh ang page.']);
+        echo json_encode(['success' => false, 'message' => 'Security token invalid or expired. Please refresh the page.']);
         exit;
     }
 
@@ -243,7 +243,7 @@ if ($action === 'request_payout') {
     $accNumber = preg_replace('/[^0-9+ -]/', '', trim($_POST['account_number'] ?? ''));
 
     if (!isset($COIN_RATES[$amountPhp])) {
-        echo json_encode(['success' => false, 'message' => 'Di-wastong payout amount.']);
+        echo json_encode(['success' => false, 'message' => 'Invalid payout amount.']);
         exit;
     }
 
@@ -251,13 +251,13 @@ if ($action === 'request_payout') {
     if ($rewards['coins'] < $requiredCoins) {
         echo json_encode([
             'success' => false, 
-            'message' => "Kulang ang iyong coins! Kailangan mo ng {$requiredCoins} coins para sa ₱{$amountPhp}. Kasalukuyang coins: {$rewards['coins']}."
+            'message' => "Insufficient coins! You need {$requiredCoins} coins for ₱{$amountPhp}. Current balance: {$rewards['coins']} coins."
         ]);
         exit;
     }
 
     if (empty($accName) || empty($accNumber) || strlen($accNumber) < 10) {
-        echo json_encode(['success' => false, 'message' => 'Pakilagay ang wastong Account Name at Mobile Number (at least 10 digits).']);
+        echo json_encode(['success' => false, 'message' => 'Please provide a valid Account Name and Mobile Number (at least 10 digits).']);
         exit;
     }
 
@@ -286,12 +286,12 @@ if ($action === 'request_payout') {
         echo json_encode([
             'success' => true,
             'coins' => intval($newRow['coins']),
-            'message' => "Matagumpay na naisumite ang iyong payout request na ₱{$amountPhp} sa {$accNumber}! Ipapadala ito sa iyong {$method} sa loob ng 24-48 oras."
+            'message' => "Successfully submitted payout request for ₱{$amountPhp} to {$accNumber}! Funds will be sent via {$method} within 24-48 hours."
         ]);
         exit;
     } catch (Exception $e) {
         $pdo->rollBack();
-        echo json_encode(['success' => false, 'message' => 'Nagkaroon ng problema sa pagsusumite. Subukang muli mamaya.']);
+        echo json_encode(['success' => false, 'message' => 'An error occurred while submitting your request. Please try again later.']);
         exit;
     }
 }
@@ -316,7 +316,7 @@ if ($action === 'payout_history') {
 if ($action === 'save_payout_settings') {
     $csrf = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
     if (!verifyCsrfToken($csrf)) {
-        echo json_encode(['success' => false, 'message' => 'Security token invalid o na-expire. Mangyaring i-refresh ang page.']);
+        echo json_encode(['success' => false, 'message' => 'Security token invalid or expired. Please refresh the page.']);
         exit;
     }
 
@@ -326,7 +326,7 @@ if ($action === 'save_payout_settings') {
     $number = preg_replace('/[^0-9+ -]/', '', trim($_POST['default_account_number'] ?? ''));
 
     if (empty($name) || empty($number) || strlen($number) < 10) {
-        echo json_encode(['success' => false, 'message' => 'Pakilagay ang wastong Account Name at Mobile Number (at least 10 digits).']);
+        echo json_encode(['success' => false, 'message' => 'Please provide a valid Account Name and Mobile Number (at least 10 digits).']);
         exit;
     }
 
@@ -337,7 +337,7 @@ if ($action === 'save_payout_settings') {
     ");
     $up->execute([$method, $name, $number, $userId]);
 
-    echo json_encode(['success' => true, 'message' => 'Matagumpay na na-save ang iyong Payout Details!']);
+    echo json_encode(['success' => true, 'message' => 'Payout details successfully saved!']);
     exit;
 }
 

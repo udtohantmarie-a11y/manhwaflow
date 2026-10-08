@@ -68,11 +68,11 @@ try {
 function dieDatabaseError($e, $isLocalDev) {
     $techError = $isLocalDev 
         ? "<p style='color:#a1a1aa;font-size:12px;font-family:monospace;word-break:break-all;'>Technical Error: " . htmlspecialchars($e->getMessage()) . "</p>"
-        : "<p style='color:#a1a1aa;font-size:12px;'>Kasalukuyang nagpapanatili ng koneksyon ang server. Pakisubukang muli mamaya.</p>";
+        : "<p style='color:#a1a1aa;font-size:12px;'>The server is currently unable to establish a database connection. Please try again later.</p>";
 
     die("<div style='background:#12141a;color:#f87171;padding:24px;font-family:sans-serif;max-width:550px;margin:60px auto;border-radius:16px;border:1px solid #dc2626;'>
             <h2 style='margin-top:0;'>⚠️ Database Connection Error</h2>
-            <p style='color:#e2e8f0;font-size:14px;'>Hindi makakonekta sa database server.</p>
+            <p style='color:#e2e8f0;font-size:14px;'>Unable to connect to the database server.</p>
             {$techError}
          </div>");
 }

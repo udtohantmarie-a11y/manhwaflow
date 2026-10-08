@@ -16,7 +16,7 @@ $error = '';
 $rateStatus = checkRateLimit('login', 5, 300);
 
 if (isset($_GET['error']) && $_GET['error'] === 'unauthorized') {
-    $error = 'Kailangan mong mag-sign in bilang Administrator upang ma-access ang pahinang iyon.';
+    $error = 'You must sign in as Administrator to access that page.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
 
         if (empty($loginInput) || empty($password)) {
-            $error = 'Paki-fill up ang lahat ng fields.';
+            $error = 'Please fill in all fields.';
         } else {
             $stmt = $pdo->prepare("SELECT * FROM `users` WHERE `username` = ? OR `email` = ?");
             $stmt->execute([$loginInput, $loginInput]);
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             } else {
                 recordFailedAttempt('login', 5, 300);
-                $error = 'Maling username/email o password. Pakisubukang muli.';
+                $error = 'Invalid username/email or password. Please try again.';
             }
         }
     }

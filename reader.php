@@ -213,12 +213,12 @@ require_once __DIR__ . '/includes/header.php';
 <div id="floating-scroll-controls" class="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 transition-all duration-300">
     <button onclick="scrollReader('up', 'Floating Button')" 
             class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
-            title="Scroll Up (Pataas)">
+            title="Scroll Up">
         <i class="fa-solid fa-chevron-up text-sm text-brand-400"></i>
     </button>
     <button onclick="scrollReader('down', 'Floating Button')" 
             class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
-            title="Scroll Down (Pababa)">
+            title="Scroll Down">
         <i class="fa-solid fa-chevron-down text-sm text-brand-400"></i>
     </button>
 </div>
@@ -242,8 +242,8 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h4 class="font-bold text-white">Screen Tap Zones</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        &bull; <strong>Left side (35%):</strong> Scroll Up (Pataas)<br>
-                        &bull; <strong>Right side (35%):</strong> Scroll Down (Pababa)<br>
+                        &bull; <strong>Left side (35%):</strong> Scroll Up<br>
+                        &bull; <strong>Right side (35%):</strong> Scroll Down<br>
                         &bull; <strong>Center area:</strong> Show / Hide Menu Bar
                     </p>
                 </div>
@@ -255,8 +255,8 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h4 class="font-bold text-white">Hardware Volume Keys</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        &bull; <strong>Volume Up:</strong> Scroll Up (Pataas)<br>
-                        &bull; <strong>Volume Down:</strong> Scroll Down (Pababa)
+                        &bull; <strong>Volume Up:</strong> Scroll Up<br>
+                        &bull; <strong>Volume Down:</strong> Scroll Down
                     </p>
                 </div>
             </div>
@@ -267,7 +267,7 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h4 class="font-bold text-white">Floating Thumb Buttons</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        Pindutin ang <strong>▲ at ▼ buttons</strong> sa ibaba para sa mabilis na one-hand thumb scrolling.
+                        Tap the <strong>▲ and ▼ buttons</strong> below for fast one-hand thumb scrolling.
                     </p>
                 </div>
             </div>
@@ -570,18 +570,18 @@ function toggleFullscreen() {
 }
 
 // ==========================================
-// 4. Smooth Reader Scroll (Pataas & Pababa)
+// 4. Smooth Reader Scroll (Up & Down)
 // ==========================================
 function scrollReader(direction, source = '') {
     const scrollAmount = Math.floor(window.innerHeight * 0.75);
     if (direction === 'up') {
         window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
         showTapIndicator('up');
-        if (source) showScrollToast('Scroll Up (Pataas)', 'fa-chevron-up');
+        if (source) showScrollToast('Scroll Up', 'fa-chevron-up');
     } else {
         window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
         showTapIndicator('down');
-        if (source) showScrollToast('Scroll Down (Pababa)', 'fa-chevron-down');
+        if (source) showScrollToast('Scroll Down', 'fa-chevron-down');
     }
 }
 
@@ -686,8 +686,8 @@ window.addEventListener('touchend', (e) => {
 
 function handleScreenTap(clientX) {
     const screenWidth = window.innerWidth;
-    const leftBoundary = screenWidth * 0.35;   // Left 35% -> Pataas (Up)
-    const rightBoundary = screenWidth * 0.65;  // Right 35% -> Pababa (Down)
+    const leftBoundary = screenWidth * 0.35;   // Left 35% -> Up
+    const rightBoundary = screenWidth * 0.65;  // Right 35% -> Down
 
     if (clientX < leftBoundary) {
         scrollReader('up', 'Tap Up');

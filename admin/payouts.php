@@ -84,7 +84,7 @@ require_once __DIR__ . '/../includes/header.php';
             <h1 class="text-2xl sm:text-3xl font-black text-white mt-1">
                 GCash &amp; Load Payout Requests
             </h1>
-            <p class="text-xs text-slate-400">Dito mo makikita ang mga nag-cashout na readers gamit ang kanilang naipong Flow Coins.</p>
+            <p class="text-xs text-slate-400">Review and process reader reward redemption requests via GCash, Maya, and Prepaid Load.</p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -142,7 +142,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php if (empty($requests)): ?>
                         <tr>
                             <td colspan="9" class="p-8 text-center text-slate-500">
-                                Walang payout requests sa kasalukuyan.
+                                No payout requests found.
                             </td>
                         </tr>
                     <?php endif; ?>
@@ -192,7 +192,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="p-3.5 text-right">
                                 <?php if ($r['status'] === 'pending'): ?>
                                     <div class="flex items-center justify-end gap-2">
-                                        <form method="POST" onsubmit="return confirm('Sigurado ka bang na-send mo na ang ₱<?= $r['amount_php'] ?> sa GCash ni <?= htmlspecialchars($r['account_name']) ?>?')">
+                                        <form method="POST" onsubmit="return confirm('Confirm that you have transferred ₱<?= $r['amount_php'] ?> to <?= htmlspecialchars($r['account_name']) ?> (<?= htmlspecialchars($r['account_number']) ?>)?')">
                                             <?= csrfField() ?>
                                             <input type="hidden" name="payout_id" value="<?= $r['id'] ?>">
                                             <input type="hidden" name="action" value="approve">
@@ -200,7 +200,7 @@ require_once __DIR__ . '/../includes/header.php';
                                                 Mark Paid
                                             </button>
                                         </form>
-                                        <form method="POST" onsubmit="return confirm('I-reject ang payout at ibalik ang coins sa user?')">
+                                        <form method="POST" onsubmit="return confirm('Reject this cashout request and refund <?= $r['coins_deducted'] ?> coins to the user?')">
                                             <?= csrfField() ?>
                                             <input type="hidden" name="payout_id" value="<?= $r['id'] ?>">
                                             <input type="hidden" name="action" value="reject">
