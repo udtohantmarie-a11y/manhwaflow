@@ -1,11 +1,10 @@
 <?php
-// register.php - User Registration
+// register.php - Secure User Registration
 require_once __DIR__ . '/config/db.php';
-$pdo = getPdo();
+require_once __DIR__ . '/includes/security.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+startSecureSession();
+$pdo = getPdo();
 
 if (isset($_SESSION['user_id'])) {
     header("Location: " . BASE_URL);
@@ -15,43 +14,59 @@ if (isset($_SESSION['user_id'])) {
 $error = '';
 $success = '';
 
+$rateStatus = checkRateLimit('register', 5, 300);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $confirmPassword = $_POST['confirm_password'] ?? '';
-
-    if (empty($username) || empty($email) || empty($password)) {
-        $error = 'Please fill in all fields.';
-    } elseif (strlen($username) < 3) {
-        $error = 'Username must be at least 3 characters long.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Please enter a valid email address.';
-    } elseif (strlen($password) < 6) {
-        $error = 'Password must be at least 6 characters long.';
-    } elseif ($password !== $confirmPassword) {
-        $error = 'Passwords do not match.';
+    if (!$rateStatus['allowed']) {
+        $error = $rateStatus['message'];
     } else {
-        // Check if username or email already exists
-        $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
-        $checkStmt->execute([$username, $email]);
-        if ($checkStmt->fetch()) {
-            $error = 'An account with this username or email already exists.';
+        requireCsrf();
+        $username = trim($_POST['username'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $confirmPassword = $_POST['confirm_password'] ?? '';
+
+        if (empty($username) || empty($email) || empty($password)) {
+            $error = 'Paki-fill up ang lahat ng fields.';
+        } elseif (!preg_match('/^[a-zA-Z0-9_]{3,20}$/', $username)) {
+            $error = 'Ang username ay dapat 3 hanggang 20 characters lamang (letters, numbers, at underscore _ lamang ang pwede).';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Pakilagay ang wastong email address.';
+        } elseif (strlen($password) < 6) {
+            $error = 'Ang password ay dapat mayroong hindi bababa sa 6 characters.';
+        } elseif ($password !== $confirmPassword) {
+            $error = 'Hindi magkatugma ang kumpirmasyon ng password.';
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $insert = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'user')");
-            $insert->execute([$username, $email, $hashed]);
+            // Check if username or email already exists
+            $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+            $checkStmt->execute([$username, $email]);
+            if ($checkStmt->fetch()) {
+                recordFailedAttempt('register', 5, 300);
+                $error = 'Mayroon nang account gamit ang username o email na ito.';
+            } else {
+                $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $insert = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'user')");
+                $insert->execute([$username, $email, $hashed]);
 
-            // Auto-login after registration
-            $newId = $pdo->lastInsertId();
-            $_SESSION['user_id'] = $newId;
-            $_SESSION['username'] = $username;
-            $_SESSION['email'] = $email;
-            $_SESSION['role'] = 'user';
-            $_SESSION['avatar'] = 'default.png';
+                $newId = $pdo->lastInsertId();
 
-            header("Location: " . BASE_URL . "?msg=welcome");
-            exit;
+                // Initialize user rewards record
+                $initRewards = $pdo->prepare("INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `streak_days`) VALUES (?, 0, 0, 0)");
+                $initRewards->execute([$newId]);
+
+                // Auto-login after registration with regenerated session
+                session_regenerate_id(true);
+                clearRateLimit('register');
+
+                $_SESSION['user_id'] = $newId;
+                $_SESSION['username'] = $username;
+                $_SESSION['email'] = $email;
+                $_SESSION['role'] = 'user';
+                $_SESSION['avatar'] = 'default.png';
+
+                header("Location: " . BASE_URL . "?msg=welcome");
+                exit;
+            }
         }
     }
 }
@@ -66,7 +81,7 @@ require_once __DIR__ . '/includes/header.php';
             <i class="fa-solid fa-user-plus"></i>
         </div>
         <h1 class="text-2xl sm:text-3xl font-black text-white">Create Your Account</h1>
-        <p class="text-xs text-slate-400">Join ManhwaFlow to save your reading list and sync preferences across devices.</p>
+        <p class="text-xs text-slate-400">Join ManhwaFlow to earn Flow Coins, read chapters, and sync reading history.</p>
     </div>
 
     <?php if (!empty($error)): ?>
@@ -77,13 +92,15 @@ require_once __DIR__ . '/includes/header.php';
 
     <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
         <form action="" method="POST" class="space-y-4">
+            <?= csrfField() ?>
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Username
+                    Username (letters, numbers, _ only)
                 </label>
                 <div class="relative">
                     <i class="fa-solid fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
                     <input type="text" name="username" required placeholder="e.g. shadow_monarch" 
+                           pattern="[a-zA-Z0-9_]{3,20}" title="3 to 20 letters, numbers, or underscores"
                            value="<?= isset($_POST['username']) ? htmlspecialchars($_POST['username']) : '' ?>"
                            class="w-full bg-dark-850 border border-dark-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
                 </div>
@@ -107,7 +124,7 @@ require_once __DIR__ . '/includes/header.php';
                 </label>
                 <div class="relative">
                     <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                    <input type="password" name="password" required placeholder="••••••••" 
+                    <input type="password" name="password" required minlength="6" placeholder="••••••••" 
                            class="w-full bg-dark-850 border border-dark-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
                 </div>
             </div>
@@ -118,7 +135,7 @@ require_once __DIR__ . '/includes/header.php';
                 </label>
                 <div class="relative">
                     <i class="fa-solid fa-check-double absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                    <input type="password" name="confirm_password" required placeholder="••••••••" 
+                    <input type="password" name="confirm_password" required minlength="6" placeholder="••••••••" 
                            class="w-full bg-dark-850 border border-dark-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
                 </div>
             </div>

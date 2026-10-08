@@ -3,10 +3,8 @@
 if (!defined('BASE_URL')) {
     require_once __DIR__ . '/../config/db.php';
 }
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/security.php';
+startSecureSession();
 
 $current_page = basename($_SERVER['PHP_SELF'], '.php');
 $headerCoins = 0;

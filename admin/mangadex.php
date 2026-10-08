@@ -1,6 +1,6 @@
 <?php
 // admin/mangadex.php - MangaDex API Auto-Importer
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/auth_check.php';
 require_once __DIR__ . '/../includes/mangadex.php';
 $pdo = getPdo();
 
@@ -13,6 +13,7 @@ $importedId = 0;
 
 // Handle Import Action
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import') {
+    requireCsrf();
     $mangaId = trim($_POST['manga_id'] ?? '');
     $maxCh = intval($_POST['max_chapters'] ?? 3);
 
@@ -211,6 +212,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                             <!-- Bottom: Import Form -->
                             <form action="" method="POST" class="pt-2 border-t border-dark-800 space-y-2">
+                                <?= csrfField() ?>
                                 <input type="hidden" name="action" value="import">
                                 <input type="hidden" name="manga_id" value="<?= htmlspecialchars($item['id']) ?>">
                                 <input type="hidden" name="title" value="<?= htmlspecialchars($item['title']) ?>">

@@ -2,11 +2,9 @@
 // api/comments.php - Chapter Comments API
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/security.php';
+startSecureSession();
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $isLoggedIn = isset($_SESSION['user_id']);
 $userId = $isLoggedIn ? intval($_SESSION['user_id']) : null;
@@ -55,9 +53,16 @@ if ($action === 'add') {
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true) ?? $_POST;
 
+    // Rate limit comments per user
+    $cLimit = checkRateLimit('comment_' . $userId, 10, 60);
+    if (!$cLimit['allowed']) {
+        echo json_encode(['success' => false, 'message' => 'Masyadong mabilis ang pag-comment. Maghintay sandali bago mag-post muli.']);
+        exit;
+    }
+
     $chapterId = trim($data['chapter_id'] ?? '');
     $seriesId = trim($data['series_id'] ?? '');
-    $comment = trim($data['comment'] ?? '');
+    $comment = strip_tags(trim($data['comment'] ?? ''));
 
     if (empty($chapterId) || empty($comment)) {
         echo json_encode(['success' => false, 'message' => 'Comment text cannot be empty.']);
@@ -86,9 +91,9 @@ if ($action === 'add') {
         'comment' => [
             'id' => $newId,
             'chapter_id' => $chapterId,
-            'author_name' => $username,
-            'avatar' => $avatar,
-            'comment' => htmlspecialchars($comment),
+            'author_name' => htmlspecialchars($username, ENT_QUOTES, 'UTF-8'),
+            'avatar' => htmlspecialchars($avatar, ENT_QUOTES, 'UTF-8'),
+            'comment' => htmlspecialchars($comment, ENT_QUOTES, 'UTF-8'),
             'likes' => 0,
             'created_at' => date('Y-m-d H:i:s')
         ],

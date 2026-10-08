@@ -1,27 +1,14 @@
 <?php
 // admin/payouts.php - GCash & Load Payout Management
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/auth_check.php';
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Simple Admin check
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-    // If not admin, check if admin user exists in DB and log them in or redirect
-    // Allow access if session role is admin or user is id 1
-    if (empty($_SESSION['user_id'])) {
-        header('Location: ' . BASE_URL . 'login.php');
-        exit;
-    }
-}
 
 // Handle Approve / Reject actions
 $message = '';
 $messageType = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrf();
     $payoutId = intval($_POST['payout_id'] ?? 0);
     $action = $_POST['action'] ?? '';
 
@@ -206,6 +193,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php if ($r['status'] === 'pending'): ?>
                                     <div class="flex items-center justify-end gap-2">
                                         <form method="POST" onsubmit="return confirm('Sigurado ka bang na-send mo na ang ₱<?= $r['amount_php'] ?> sa GCash ni <?= htmlspecialchars($r['account_name']) ?>?')">
+                                            <?= csrfField() ?>
                                             <input type="hidden" name="payout_id" value="<?= $r['id'] ?>">
                                             <input type="hidden" name="action" value="approve">
                                             <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-all">
@@ -213,6 +201,7 @@ require_once __DIR__ . '/../includes/header.php';
                                             </button>
                                         </form>
                                         <form method="POST" onsubmit="return confirm('I-reject ang payout at ibalik ang coins sa user?')">
+                                            <?= csrfField() ?>
                                             <input type="hidden" name="payout_id" value="<?= $r['id'] ?>">
                                             <input type="hidden" name="action" value="reject">
                                             <button type="submit" class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 font-semibold text-[11px] transition-all">

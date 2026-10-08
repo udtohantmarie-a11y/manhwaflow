@@ -612,6 +612,7 @@ async function savePayoutSettings(e) {
 
     try {
         const formData = new URLSearchParams();
+        formData.append('csrf_token', '<?= getCsrfToken() ?>');
         formData.append('default_payout_method', method);
         formData.append('default_account_name', name);
         formData.append('default_account_number', number);
@@ -676,6 +677,7 @@ async function submitPayout(e) {
 
     try {
         const formData = new URLSearchParams();
+        formData.append('csrf_token', '<?= getCsrfToken() ?>');
         formData.append('amount_php', amount);
         formData.append('payout_method', method);
         formData.append('account_name', name);

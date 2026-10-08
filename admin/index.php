@@ -1,7 +1,37 @@
 <?php
 // admin/index.php - Admin Dashboard & Manhwa Management
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/auth_check.php';
 $pdo = getPdo();
+
+$pwdMsg = '';
+$pwdMsgType = '';
+
+// Check if admin is using default password
+$adminUserStmt = $pdo->prepare("SELECT * FROM `users` WHERE `id` = ?");
+$adminUserStmt->execute([$_SESSION['user_id']]);
+$currentAdmin = $adminUserStmt->fetch();
+$isDefaultPassword = ($currentAdmin && password_verify('admin123', $currentAdmin['password']));
+
+// Handle change password
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_admin_password') {
+    requireCsrf();
+    $newPass = $_POST['new_password'] ?? '';
+    $confirmPass = $_POST['confirm_password'] ?? '';
+    if (strlen($newPass) < 8) {
+        $pwdMsg = 'Ang bagong password ay dapat mayroong hindi bababa sa 8 characters.';
+        $pwdMsgType = 'rose';
+    } elseif ($newPass !== $confirmPass) {
+        $pwdMsg = 'Hindi magkatugma ang kumpirmasyon ng password.';
+        $pwdMsgType = 'rose';
+    } else {
+        $hashed = password_hash($newPass, PASSWORD_DEFAULT);
+        $up = $pdo->prepare("UPDATE `users` SET `password` = ? WHERE `id` = ?");
+        $up->execute([$hashed, $_SESSION['user_id']]);
+        $pwdMsg = 'Matagumpay na nabago ang iyong Admin password! Mas secured na ang iyong website.';
+        $pwdMsgType = 'emerald';
+        $isDefaultPassword = false;
+    }
+}
 
 // Stats
 $totalManhwa = $pdo->query("SELECT COUNT(*) FROM `manhwas`")->fetchColumn();
@@ -55,13 +85,44 @@ require_once __DIR__ . '/../includes/header.php';
                class="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 hover:text-white border border-dark-700 font-bold text-xs transition-all flex items-center gap-1.5">
                 <i class="fa-solid fa-cloud-arrow-up text-brand-400"></i> Mag-upload ng Kabanata
             </a>
-            <a href="<?= BASE_URL ?>admin/seed.php" 
+            <button onclick="document.getElementById('pwd-modal').classList.remove('hidden')" 
+                    class="px-3.5 py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-400 border border-amber-500/30 font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-key"></i> Security / Password
+            </button>
+            <a href="<?= BASE_URL ?>admin/seed.php?csrf=<?= getCsrfToken() ?>" 
                onclick="return confirm('Nais mo bang i-reset at muling lagyan ng sample manhwas ang database?')"
                class="px-3.5 py-2.5 rounded-xl bg-dark-850 hover:bg-rose-900/30 text-slate-400 hover:text-rose-400 border border-dark-800 font-semibold text-xs transition-colors" title="I-reset ang Sample Data">
                 <i class="fa-solid fa-rotate"></i> Re-Seed
             </a>
         </div>
     </div>
+
+    <!-- Security Notification / Password Feedback -->
+    <?php if (!empty($pwdMsg)): ?>
+        <div class="p-4 rounded-xl bg-<?= $pwdMsgType ?>-500/10 border border-<?= $pwdMsgType ?>-500/30 text-<?= $pwdMsgType ?>-400 text-xs font-bold flex items-center gap-2">
+            <i class="fa-solid fa-circle-check"></i> <?= htmlspecialchars($pwdMsg) ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($isDefaultPassword): ?>
+        <div class="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+            <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 text-lg">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h4 class="text-sm font-black text-white">KRITIKAL NA SEGURIDAD: Naka-default pa ang Admin Password mo!</h4>
+                    <p class="text-xs text-rose-300/80 mt-0.5">
+                        Ang password ng admin account mo ay <code class="px-1.5 py-0.5 rounded bg-rose-950 font-mono text-rose-200">admin123</code> pa rin. Maaaring ma-hack ang website kung hindi mo ito papalitan agad bago i-deploy online.
+                    </p>
+                </div>
+            </div>
+            <button onclick="document.getElementById('pwd-modal').classList.remove('hidden')" 
+                    class="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shrink-0 shadow-lg shadow-rose-950/50 transition-all">
+                <i class="fa-solid fa-lock mr-1.5"></i> Palitan ang Password Ngayon
+            </button>
+        </div>
+    <?php endif; ?>
 
     <!-- Stats Overview Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -182,7 +243,7 @@ require_once __DIR__ . '/../includes/header.php';
                                        class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 transition-colors" title="Tingnan">
                                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                     </a>
-                                    <a href="<?= BASE_URL ?>admin/delete.php?type=manhwa&id=<?= $m['id'] ?>" 
+                                    <a href="<?= BASE_URL ?>admin/delete.php?type=manhwa&id=<?= $m['id'] ?>&csrf=<?= getCsrfToken() ?>" 
                                        onclick="return confirm('Sigurado ka bang nais mong burahin ang <?= htmlspecialchars(addslashes($m['title'])) ?> at lahat ng kabanata nito?')"
                                        class="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white transition-colors" title="Burahin">
                                         <i class="fa-solid fa-trash-can"></i>
@@ -196,6 +257,54 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
+</div>
+
+<!-- Change Admin Password Modal -->
+<div id="pwd-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+    <div class="bg-dark-900 border border-dark-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative">
+        <button onclick="document.getElementById('pwd-modal').classList.add('hidden')" 
+                class="absolute right-4 top-4 text-slate-400 hover:text-white transition-colors">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-white">Baguhin ang Admin Password</h3>
+                <p class="text-xs text-slate-400">Protektahan ang iyong website laban sa unauthorized access.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="" class="space-y-4">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="change_admin_password">
+
+            <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1.5">Bagong Password (min. 8 characters)</label>
+                <input type="password" name="new_password" required minlength="8" placeholder="••••••••" 
+                       class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1.5">Kumpirmahin ang Bagong Password</label>
+                <input type="password" name="confirm_password" required minlength="8" placeholder="••••••••" 
+                       class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('pwd-modal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 text-xs font-bold">
+                    Kanselahin
+                </button>
+                <button type="submit" 
+                        class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md shadow-brand-600/30">
+                    I-save ang Password
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

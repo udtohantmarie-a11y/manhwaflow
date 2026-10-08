@@ -2,10 +2,8 @@
 // api/history.php - Reading History API for Resume Reading & Continue Reading
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../includes/security.php';
+startSecureSession();
 
 $pdo = getPdo();
 
@@ -16,7 +14,12 @@ if (!empty($userId)) {
 } else {
     if (empty($_COOKIE['guest_reader_token'])) {
         $userToken = 'guest_' . bin2hex(random_bytes(16));
-        setcookie('guest_reader_token', $userToken, time() + (86400 * 365), '/');
+        setcookie('guest_reader_token', $userToken, [
+            'expires' => time() + (86400 * 365),
+            'path' => '/',
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ]);
     } else {
         $userToken = $_COOKIE['guest_reader_token'];
     }

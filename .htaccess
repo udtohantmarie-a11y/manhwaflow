@@ -1,0 +1,59 @@
+# ----------------------------------------------------------------------
+# ManhwaFlow - Web Server Security & Hardening Configuration
+# ----------------------------------------------------------------------
+
+# 1. Disable Directory Browsing (Prevents hackers from viewing folder file lists)
+Options -Indexes
+
+# 2. Block Access to Hidden & Sensitive Files and Folders (.git, .env, .gitignore, etc.)
+<FilesMatch "^\.(?!well-known)">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# 3. Block Direct HTTP Access to Cache JSON and Internal Data Files
+<FilesMatch "\.(json|log|sql|bak|example\.php)$">
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Allow manifest.json specifically for PWA
+<Files "manifest.json">
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+</Files>
+
+# 4. Block Dangerous HTTP Methods (Trace, Track)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK)
+    RewriteRule .* - [F]
+</IfModule>
+
+# 5. Security Response Headers
+<IfModule mod_headers.c>
+    # Prevent Clickjacking (iframe embedding on other domains)
+    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Prevent MIME Sniffing attacks
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Enable Cross-Site Scripting (XSS) filter built into browsers
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Privacy Referrer policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Permissions Policy (restrict dangerous browser features)
+    Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>

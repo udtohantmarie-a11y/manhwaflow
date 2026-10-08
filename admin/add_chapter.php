@@ -1,6 +1,6 @@
 <?php
 // admin/add_chapter.php - Upload New Chapter and Panels
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/auth_check.php';
 $pdo = getPdo();
 
 $error = '';
@@ -12,6 +12,7 @@ $selectedManhwaId = isset($_GET['manhwa_id']) ? intval($_GET['manhwa_id']) : 0;
 $manhwas = $pdo->query("SELECT id, title, (SELECT MAX(chapter_number) FROM chapters WHERE manhwa_id = manhwas.id) as max_ch FROM manhwas ORDER BY title ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrf();
     $manhwaId = intval($_POST['manhwa_id'] ?? 0);
     $chapterNum = floatval($_POST['chapter_number'] ?? 1);
     $chapterTitle = trim($_POST['chapter_title'] ?? '');
@@ -129,6 +130,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 
     <form action="" method="POST" enctype="multipart/form-data" class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 space-y-6">
+        <?= csrfField() ?>
         
         <!-- Select Manhwa -->
         <div>

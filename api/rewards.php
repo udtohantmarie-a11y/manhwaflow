@@ -2,11 +2,9 @@
 // api/rewards.php - Flow Rewards & Payout API
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/security.php';
+startSecureSession();
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $action = $_GET['action'] ?? ($_POST['action'] ?? 'get_status');
 $userId = $_SESSION['user_id'] ?? null;
@@ -232,10 +230,17 @@ if ($action === 'sponsor_quest') {
 
 // --- 5. REQUEST CASHOUT / PAYOUT ---
 if ($action === 'request_payout') {
+    $csrf = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if (!verifyCsrfToken($csrf)) {
+        echo json_encode(['success' => false, 'message' => 'Security token invalid o na-expire. Mangyaring i-refresh ang page.']);
+        exit;
+    }
+
     $amountPhp = intval($_POST['amount_php'] ?? 0);
-    $method = trim($_POST['payout_method'] ?? 'gcash');
-    $accName = trim($_POST['account_name'] ?? '');
-    $accNumber = trim($_POST['account_number'] ?? '');
+    $rawMethod = strtolower(trim($_POST['payout_method'] ?? 'gcash'));
+    $method = in_array($rawMethod, ['gcash', 'maya', 'load']) ? $rawMethod : 'gcash';
+    $accName = strip_tags(trim($_POST['account_name'] ?? ''));
+    $accNumber = preg_replace('/[^0-9+ -]/', '', trim($_POST['account_number'] ?? ''));
 
     if (!isset($COIN_RATES[$amountPhp])) {
         echo json_encode(['success' => false, 'message' => 'Di-wastong payout amount.']);
@@ -251,8 +256,8 @@ if ($action === 'request_payout') {
         exit;
     }
 
-    if (empty($accName) || empty($accNumber)) {
-        echo json_encode(['success' => false, 'message' => 'Pakilagay ang Account Name at Mobile Number.']);
+    if (empty($accName) || empty($accNumber) || strlen($accNumber) < 10) {
+        echo json_encode(['success' => false, 'message' => 'Pakilagay ang wastong Account Name at Mobile Number (at least 10 digits).']);
         exit;
     }
 
@@ -286,7 +291,7 @@ if ($action === 'request_payout') {
         exit;
     } catch (Exception $e) {
         $pdo->rollBack();
-        echo json_encode(['success' => false, 'message' => 'Nagkaroon ng error sa pagsusumite: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Nagkaroon ng problema sa pagsusumite. Subukang muli mamaya.']);
         exit;
     }
 }
@@ -309,9 +314,21 @@ if ($action === 'payout_history') {
 
 // --- 7. SAVE PAYOUT SETTINGS ---
 if ($action === 'save_payout_settings') {
-    $method = trim($_POST['default_payout_method'] ?? 'gcash');
-    $name = trim($_POST['default_account_name'] ?? '');
-    $number = trim($_POST['default_account_number'] ?? '');
+    $csrf = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if (!verifyCsrfToken($csrf)) {
+        echo json_encode(['success' => false, 'message' => 'Security token invalid o na-expire. Mangyaring i-refresh ang page.']);
+        exit;
+    }
+
+    $rawMethod = strtolower(trim($_POST['default_payout_method'] ?? 'gcash'));
+    $method = in_array($rawMethod, ['gcash', 'maya', 'load']) ? $rawMethod : 'gcash';
+    $name = strip_tags(trim($_POST['default_account_name'] ?? ''));
+    $number = preg_replace('/[^0-9+ -]/', '', trim($_POST['default_account_number'] ?? ''));
+
+    if (empty($name) || empty($number) || strlen($number) < 10) {
+        echo json_encode(['success' => false, 'message' => 'Pakilagay ang wastong Account Name at Mobile Number (at least 10 digits).']);
+        exit;
+    }
 
     $up = $pdo->prepare("
         UPDATE `user_rewards` 

@@ -1,11 +1,10 @@
 <?php
-// login.php - User Login
+// login.php - Secure User Login
 require_once __DIR__ . '/config/db.php';
-$pdo = getPdo();
+require_once __DIR__ . '/includes/security.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+startSecureSession();
+$pdo = getPdo();
 
 // If already logged in, redirect home
 if (isset($_SESSION['user_id'])) {
@@ -14,31 +13,48 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = '';
+$rateStatus = checkRateLimit('login', 5, 300);
+
+if (isset($_GET['error']) && $_GET['error'] === 'unauthorized') {
+    $error = 'Kailangan mong mag-sign in bilang Administrator upang ma-access ang pahinang iyon.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $loginInput = trim($_POST['username_or_email'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    if (empty($loginInput) || empty($password)) {
-        $error = 'Please fill in all fields.';
+    if (!$rateStatus['allowed']) {
+        $error = $rateStatus['message'];
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM `users` WHERE `username` = ? OR `email` = ?");
-        $stmt->execute([$loginInput, $loginInput]);
-        $user = $stmt->fetch();
+        requireCsrf();
+        $loginInput = trim($_POST['username_or_email'] ?? '');
+        $password = $_POST['password'] ?? '';
 
-        if ($user && password_verify($password, $user['password'])) {
-            // Login success
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['role'] = $user['role'];
-            $_SESSION['avatar'] = $user['avatar'];
-
-            $redirect = $_GET['redirect'] ?? BASE_URL;
-            header("Location: " . $redirect);
-            exit;
+        if (empty($loginInput) || empty($password)) {
+            $error = 'Paki-fill up ang lahat ng fields.';
         } else {
-            $error = 'Invalid username/email or password.';
+            $stmt = $pdo->prepare("SELECT * FROM `users` WHERE `username` = ? OR `email` = ?");
+            $stmt->execute([$loginInput, $loginInput]);
+            $user = $stmt->fetch();
+
+            if ($user && password_verify($password, $user['password'])) {
+                // Success: Regenerate session ID to prevent session fixation attacks
+                session_regenerate_id(true);
+                clearRateLimit('login');
+
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['email'] = $user['email'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['avatar'] = $user['avatar'];
+
+                // Open redirect prevention
+                $redirectParam = $_GET['redirect'] ?? '';
+                $safeRedirect = sanitizeRedirectUrl($redirectParam, ($user['role'] === 'admin' ? BASE_URL . 'admin/index.php' : BASE_URL));
+                
+                header("Location: " . $safeRedirect);
+                exit;
+            } else {
+                recordFailedAttempt('login', 5, 300);
+                $error = 'Maling username/email o password. Pakisubukang muli.';
+            }
         }
     }
 }
@@ -53,7 +69,7 @@ require_once __DIR__ . '/includes/header.php';
             <i class="fa-solid fa-right-to-bracket"></i>
         </div>
         <h1 class="text-2xl sm:text-3xl font-black text-white">Sign In to ManhwaFlow</h1>
-        <p class="text-xs text-slate-400">Access your saved bookmarks, reading history, and account settings.</p>
+        <p class="text-xs text-slate-400">Access your saved bookmarks, reading history, and Flow Coins rewards.</p>
     </div>
 
     <?php if (!empty($error)): ?>
@@ -64,6 +80,7 @@ require_once __DIR__ . '/includes/header.php';
 
     <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
         <form action="" method="POST" class="space-y-4">
+            <?= csrfField() ?>
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
                     Username or Email

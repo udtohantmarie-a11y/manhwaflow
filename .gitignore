@@ -2,6 +2,16 @@
 /cache/
 *.log
 
+# Sensitive credentials & environment files (NEVER commit secrets to GitHub)
+config/db.local.php
+.env
+.env.local
+.env.*.local
+
+# User uploads (keep folder structure and security rules only)
+uploads/*
+!uploads/.htaccess
+
 # Operating System files
 .DS_Store
 Thumbs.db
@@ -12,4 +22,3 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
-

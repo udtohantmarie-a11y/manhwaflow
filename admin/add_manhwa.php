@@ -1,6 +1,6 @@
 <?php
 // admin/add_manhwa.php - Add New Manhwa Title
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/auth_check.php';
 $pdo = getPdo();
 
 $error = '';
@@ -10,6 +10,7 @@ $success = '';
 $genres = $pdo->query("SELECT * FROM `genres` ORDER BY `name` ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrf();
     $title = trim($_POST['title'] ?? '');
     $alt_title = trim($_POST['alt_title'] ?? '');
     $author = trim($_POST['author'] ?? 'Unknown');
@@ -112,6 +113,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 
     <form action="" method="POST" enctype="multipart/form-data" class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 space-y-6">
+        <?= csrfField() ?>
         
         <!-- Row 1: Title & Alt Title -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -2,11 +2,9 @@
 // api/bookmark.php - User Bookmarks API (Account Required)
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/security.php';
+startSecureSession();
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $isLoggedIn = isset($_SESSION['user_id']);
 $userId = $isLoggedIn ? intval($_SESSION['user_id']) : 0;

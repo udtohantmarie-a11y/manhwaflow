@@ -2,12 +2,10 @@
 // api/notifications.php - Live Notification System for User's Bookmarked Series
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/mangadex.php';
+startSecureSession();
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $isLoggedIn = isset($_SESSION['user_id']);
 $userId = $isLoggedIn ? intval($_SESSION['user_id']) : 0;
