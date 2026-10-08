@@ -140,7 +140,19 @@ function initializeDatabase($pdo) {
             `last_checkin_date` DATE NULL,
             `last_sponsor_date` DATE NULL,
             `chapters_read_count` INT DEFAULT 0,
+            `default_payout_method` VARCHAR(50) DEFAULT 'gcash',
+            `default_account_name` VARCHAR(100) NULL,
+            `default_account_number` VARCHAR(100) NULL,
             `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+        CREATE TABLE IF NOT EXISTS `user_chapter_rewards` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `user_id` INT NOT NULL,
+            `chapter_id` VARCHAR(100) NOT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY `uniq_user_chapter` (`user_id`, `chapter_id`),
             FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -170,6 +182,17 @@ function initializeDatabase($pdo) {
             FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+    // Ensure default payout columns exist in user_rewards
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM `user_rewards` LIKE 'default_account_number'")->fetchAll();
+        if (empty($cols)) {
+            $pdo->exec("ALTER TABLE `user_rewards` 
+                ADD COLUMN `default_payout_method` VARCHAR(50) DEFAULT 'gcash',
+                ADD COLUMN `default_account_name` VARCHAR(100) NULL,
+                ADD COLUMN `default_account_number` VARCHAR(100) NULL");
+        }
+    } catch(Exception $e) {}
 
     // Seed default admin if no users exist
     $checkUsers = $pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();

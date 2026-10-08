@@ -39,6 +39,9 @@ $coins = $userRewards ? intval($userRewards['coins']) : 0;
 $streak = $userRewards ? intval($userRewards['streak_days']) : 0;
 $chaptersRead = $userRewards ? intval($userRewards['chapters_read_count']) : 0;
 $totalEarned = $userRewards ? intval($userRewards['total_earned']) : 0;
+$defaultMethod = $userRewards['default_payout_method'] ?? 'gcash';
+$defaultName = $userRewards['default_account_name'] ?? '';
+$defaultNumber = $userRewards['default_account_number'] ?? '';
 
 // Hunter rank computation
 function calcRank($total) {
@@ -269,6 +272,58 @@ $rankData = calcRank($totalEarned);
 
         </div>
     </section>
+
+    <!-- SAVED PAYOUT DETAILS (GCASH / MAYA) -->
+    <?php if ($userId): ?>
+    <section class="bg-dark-900 border border-dark-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-dark-800">
+            <div>
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-wallet text-emerald-400"></i> Payout Settings (Saan Ipadadala ang Pera)
+                </h3>
+                <p class="text-xs text-slate-400">I-set up ang iyong GCash o Maya details para automatic nang naka-ready tuwing mag-re-redeem ka.</p>
+            </div>
+            <div>
+                <?php if (!empty($defaultNumber)): ?>
+                    <span id="payout-status-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                        <i class="fa-solid fa-circle-check text-[10px]"></i> Saved: <?= strtoupper($defaultMethod) ?> (<?= htmlspecialchars($defaultNumber) ?>)
+                    </span>
+                <?php else: ?>
+                    <span id="payout-status-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+                        <i class="fa-solid fa-circle-exclamation text-[10px]"></i> I-set up ang iyong GCash dito
+                    </span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <form id="payout-settings-form" onsubmit="savePayoutSettings(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div>
+                <label class="block text-[11px] font-bold text-slate-400 mb-1">Preferred Method</label>
+                <select id="setting-method" class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+                    <option value="gcash" <?= $defaultMethod === 'gcash' ? 'selected' : '' ?>>GCash</option>
+                    <option value="maya" <?= $defaultMethod === 'maya' ? 'selected' : '' ?>>Maya (PayMaya)</option>
+                    <option value="load" <?= $defaultMethod === 'load' ? 'selected' : '' ?>>Prepaid Load</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[11px] font-bold text-slate-400 mb-1">Account Full Name</label>
+                <input type="text" id="setting-name" value="<?= htmlspecialchars($defaultName) ?>" required placeholder="e.g. Maria Santos"
+                       class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+                <label class="block text-[11px] font-bold text-slate-400 mb-1">Mobile / Account Number</label>
+                <div class="flex gap-2">
+                    <input type="text" id="setting-number" value="<?= htmlspecialchars($defaultNumber) ?>" required placeholder="e.g. 09123456789"
+                           class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500">
+                    <button type="submit" id="btn-save-settings" 
+                            class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-md transition-all">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </form>
+    </section>
+    <?php endif; ?>
 
     <!-- REDEEM STORE & CASHOUT (GCASH / MAYA / LOAD) -->
     <section class="space-y-6">
@@ -542,6 +597,45 @@ async function claimSponsorQuest() {
     }
 }
 
+// Save Payout Settings Form
+async function savePayoutSettings(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-save-settings');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+    }
+
+    const method = document.getElementById('setting-method').value;
+    const name = document.getElementById('setting-name').value;
+    const number = document.getElementById('setting-number').value;
+
+    try {
+        const formData = new URLSearchParams();
+        formData.append('default_payout_method', method);
+        formData.append('default_account_name', name);
+        formData.append('default_account_number', number);
+
+        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=save_payout_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+            window.location.reload();
+        }
+    } catch(err) {
+        alert('Nagkaroon ng problema sa pag-save.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save';
+        }
+    }
+}
+
 // Modal controls
 function openRedeemModal(amount, coins) {
     const userCoins = <?= $coins ?>;
@@ -552,6 +646,15 @@ function openRedeemModal(amount, coins) {
     document.getElementById('payout-amount').value = amount;
     document.getElementById('modal-amount-display').textContent = `₱${amount}.00`;
     document.getElementById('modal-coins-display').textContent = `${coins.toLocaleString()} Coins`;
+
+    // Pre-fill with saved details if available
+    const defaultMethod = <?= json_encode($defaultMethod) ?>;
+    const defaultName = <?= json_encode($defaultName) ?>;
+    const defaultNumber = <?= json_encode($defaultNumber) ?>;
+    if (defaultMethod) document.getElementById('payout-method').value = defaultMethod;
+    if (defaultName) document.getElementById('payout-name').value = defaultName;
+    if (defaultNumber) document.getElementById('payout-number').value = defaultNumber;
+
     document.getElementById('redeem-modal').classList.remove('hidden');
 }
 

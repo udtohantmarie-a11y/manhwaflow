@@ -86,6 +86,9 @@ if ($action === 'get_status') {
         'can_checkin_today' => $canCheckin,
         'can_sponsor_today' => $canSponsor,
         'rank' => getHunterRank($rewards['total_earned']),
+        'default_payout_method' => $rewards['default_payout_method'] ?? 'gcash',
+        'default_account_name' => $rewards['default_account_name'] ?? '',
+        'default_account_number' => $rewards['default_account_number'] ?? '',
         'rates' => $COIN_RATES
     ]);
     exit;
@@ -141,14 +144,33 @@ if ($action === 'read_chapter') {
         exit;
     }
 
-    // Cooldown prevention (5 seconds between awards)
-    $lastReadTime = $_SESSION['last_reward_read_time'] ?? 0;
-    $now = time();
-    if ($now - $lastReadTime < 5) {
-        echo json_encode(['success' => true, 'coins' => intval($rewards['coins']), 'awarded' => false]);
+    // Strictly check if user already claimed reward for this specific chapter
+    $checkChapter = $pdo->prepare("SELECT 1 FROM `user_chapter_rewards` WHERE `user_id` = ? AND `chapter_id` = ?");
+    $checkChapter->execute([$userId, $chapterId]);
+    if ($checkChapter->fetch()) {
+        echo json_encode([
+            'success' => true,
+            'awarded' => false,
+            'already_claimed' => true,
+            'coins' => intval($rewards['coins']),
+            'message' => 'Nakuha mo na ang coins reward para sa kabanatang ito.'
+        ]);
         exit;
     }
-    $_SESSION['last_reward_read_time'] = $now;
+
+    // Record chapter reward claim
+    try {
+        $ins = $pdo->prepare("INSERT INTO `user_chapter_rewards` (`user_id`, `chapter_id`) VALUES (?, ?)");
+        $ins->execute([$userId, $chapterId]);
+    } catch(Exception $e) {
+        echo json_encode([
+            'success' => true,
+            'awarded' => false,
+            'already_claimed' => true,
+            'coins' => intval($rewards['coins'])
+        ]);
+        exit;
+    }
 
     $earnedCoins = 5;
     $stmt = $pdo->prepare("
@@ -161,7 +183,7 @@ if ($action === 'read_chapter') {
     $stmt->execute([$earnedCoins, $earnedCoins, $userId]);
 
     $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'read_chapter', ?, ?)");
-    $log->execute([$userId, $earnedCoins, "Finished reading chapter"]);
+    $log->execute([$userId, $earnedCoins, "Finished reading chapter {$chapterId}"]);
 
     $newRow = getUserRewardsRow($pdo, $userId);
     echo json_encode([
@@ -246,6 +268,10 @@ if ($action === 'request_payout') {
         ");
         $stmt->execute([$userId, $amountPhp, $requiredCoins, $method, $accName, $accNumber]);
 
+        // Auto-save default payout settings
+        $upDefaults = $pdo->prepare("UPDATE `user_rewards` SET `default_payout_method` = ?, `default_account_name` = ?, `default_account_number` = ? WHERE `user_id` = ?");
+        $upDefaults->execute([$method, $accName, $accNumber, $userId]);
+
         $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'payout_request', ?, ?)");
         $log->execute([$userId, -$requiredCoins, "Redeemed ₱{$amountPhp} {$method} payout"]);
 
@@ -278,6 +304,23 @@ if ($action === 'payout_history') {
     $history = $stmt->fetchAll();
 
     echo json_encode(['success' => true, 'history' => $history]);
+    exit;
+}
+
+// --- 7. SAVE PAYOUT SETTINGS ---
+if ($action === 'save_payout_settings') {
+    $method = trim($_POST['default_payout_method'] ?? 'gcash');
+    $name = trim($_POST['default_account_name'] ?? '');
+    $number = trim($_POST['default_account_number'] ?? '');
+
+    $up = $pdo->prepare("
+        UPDATE `user_rewards` 
+        SET `default_payout_method` = ?, `default_account_name` = ?, `default_account_number` = ? 
+        WHERE `user_id` = ?
+    ");
+    $up->execute([$method, $name, $number, $userId]);
+
+    echo json_encode(['success' => true, 'message' => 'Matagumpay na na-save ang iyong Payout Details!']);
     exit;
 }
 

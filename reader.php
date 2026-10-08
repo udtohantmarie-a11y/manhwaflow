@@ -877,28 +877,55 @@ async function likeComment(commentId, btnEl) {
 })();
 
 // ==========================================
-// 8. Auto-claim Chapter Reading Flow Coins
+// 8. Auto-claim Chapter Reading Flow Coins (On Reading Completion)
 // ==========================================
-(async function() {
-    try {
-        const chapterId = <?= json_encode(strval($chapter['id'])) ?>;
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=read_chapter', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'chapter_id=' + encodeURIComponent(chapterId)
-        });
-        const data = await res.json();
-        if (data.success && data.awarded) {
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-5 right-5 z-50 bg-dark-900 border border-amber-500/60 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold transition-all';
-            toast.innerHTML = `<i class="fa-solid fa-coins text-amber-400 text-sm animate-bounce"></i> <span>+${data.earned_coins} Flow Coins Earned!</span>`;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 400);
-            }, 3500);
-        }
-    } catch(e) {}
+(function() {
+    let claimed = false;
+    const chapterId = <?= json_encode(strval($chapter['id'])) ?>;
+
+    async function triggerChapterReward() {
+        if (claimed) return;
+        claimed = true;
+        try {
+            const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=read_chapter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'chapter_id=' + encodeURIComponent(chapterId)
+            });
+            const data = await res.json();
+            if (data.success && data.awarded) {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-5 right-5 z-50 bg-dark-900 border border-amber-500/60 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold transition-all';
+                toast.innerHTML = `<i class="fa-solid fa-coins text-amber-400 text-sm animate-bounce"></i> <span>+${data.earned_coins} Flow Coins Earned!</span>`;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 400);
+                }, 3500);
+            }
+        } catch(e) {}
+    }
+
+    // Trigger when user scrolls to bottom navigation card or comments
+    const targetElement = document.getElementById('comments-section') || document.querySelector('.webtoon-strip-container');
+    if (targetElement && 'IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    triggerChapterReward();
+                    observer.disconnect();
+                }
+            });
+        }, { threshold: 0.1 });
+        observer.observe(targetElement);
+    } else {
+        // Fallback on scroll
+        window.addEventListener('scroll', () => {
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+                triggerChapterReward();
+            }
+        }, { passive: true });
+    }
 })();
 </script>
 
