@@ -172,6 +172,12 @@ if (isset($_SESSION['user_id'])) {
 
                     <?php if (isset($_SESSION['user_id'])): ?>
                         <div class="flex items-center gap-2">
+                            <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                                <a href="<?= BASE_URL ?>admin/index.php" 
+                                   class="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm" title="Pumunta sa Admin Panel">
+                                    <i class="fa-solid fa-shield-halved"></i> Admin
+                                </a>
+                            <?php endif; ?>
                             <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-850 border border-dark-700 text-xs">
                                 <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
                                 <span class="font-bold text-white"><?= htmlspecialchars($_SESSION['username']) ?></span>
@@ -242,6 +248,12 @@ if (isset($_SESSION['user_id'])) {
                         <span>Bookmarks</span>
                         <i class="fa-solid fa-bookmark text-xs text-slate-500"></i>
                     </a>
+                    <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                        <a href="<?= BASE_URL ?>admin/index.php" class="px-3 py-2 rounded-md text-sm text-rose-400 bg-rose-950/20 border border-rose-500/30 font-bold flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-shield-halved text-xs"></i> Admin Dashboard</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 font-bold">Manage</span>
+                        </a>
+                    <?php endif; ?>
 
                     <!-- PWA Install Button -->
                     <button type="button" onclick="triggerPWAInstall()" class="btn-pwa-install hidden w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-brand-600 via-brand-500 to-indigo-600 shadow-md flex items-center justify-between my-1">

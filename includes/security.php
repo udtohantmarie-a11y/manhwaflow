@@ -123,3 +123,4 @@ function clearRateLimit($actionKey) {
     $bucketKey = "rate_limit_{$actionKey}_" . md5($ip);
     unset($_SESSION[$bucketKey]);
 }
+

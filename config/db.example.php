@@ -11,3 +11,4 @@ $dbname = 'if0_XXXXXXXX_manhwa';
 $port = 3306;
 $baseUrl = '/'; // O kaya subfolder e.g. '/' kung root domain
 */
+

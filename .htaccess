@@ -57,3 +57,4 @@ Options -Indexes
     # Permissions Policy (restrict dangerous browser features)
     Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
 </IfModule>
+
