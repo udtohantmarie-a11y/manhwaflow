@@ -1,5 +1,7 @@
 // assets/js/main.js - Global App Scripts with Account-Based Bookmarks & Live Update Notifications
 
+const APP_BASE = window.BASE_URL || (window.location.pathname.startsWith('/manhwa/') ? '/manhwa/' : '/');
+
 document.addEventListener('DOMContentLoaded', () => {
     initMobileMenu();
     initBookmarkSystem();
@@ -51,7 +53,7 @@ function initBookmarkSystem() {
     // Check status if on manhwa details page
     if (btn) {
         const mId = btn.dataset.id;
-        fetch('/manhwa/api/bookmark.php?action=status&series_id=' + encodeURIComponent(mId))
+        fetch(APP_BASE + 'api/bookmark.php?action=status&series_id=' + encodeURIComponent(mId))
             .then(res => res.json())
             .then(data => {
                 setBtnUi(data.bookmarked);
@@ -72,7 +74,7 @@ function initBookmarkSystem() {
 
             btn.disabled = true;
             try {
-                const res = await fetch('/manhwa/api/bookmark.php?action=toggle', {
+                const res = await fetch(APP_BASE + 'api/bookmark.php?action=toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -100,7 +102,7 @@ function initBookmarkSystem() {
         });
     } else {
         // Sync badge on other pages
-        fetch('/manhwa/api/bookmark.php?action=status')
+        fetch(APP_BASE + 'api/bookmark.php?action=status')
             .then(res => res.json())
             .then(data => {
                 if (data.logged_in) updateBadgeCount(data.count);
@@ -154,7 +156,7 @@ function initNotificationSystem() {
     if (markReadBtn) {
         markReadBtn.addEventListener('click', async () => {
             try {
-                await fetch('/manhwa/api/notifications.php?action=mark_read', { method: 'POST' });
+                await fetch(APP_BASE + 'api/notifications.php?action=mark_read', { method: 'POST' });
                 if (badge) badge.classList.add('hidden');
                 if (mobileBadge) mobileBadge.classList.add('hidden');
                 fetchNotifications(false);
@@ -165,7 +167,7 @@ function initNotificationSystem() {
     // Fetch notifications
     const fetchNotifications = async (isManualClick = false) => {
         try {
-            const res = await fetch('/manhwa/api/notifications.php?action=get');
+            const res = await fetch(APP_BASE + 'api/notifications.php?action=get');
             const data = await res.json();
 
             if (!data.logged_in) return;
@@ -214,7 +216,7 @@ function initNotificationSystem() {
                 } else {
                     list.innerHTML = data.notifications.map(n => `
                         <a href="${n.read_url}" class="p-3.5 flex items-start gap-3 hover:bg-dark-800/80 transition-colors group block ${n.is_read == 0 ? 'bg-brand-950/20' : ''}">
-                            <img src="${n.cover_image || '/manhwa/assets/img/placeholder.jpg'}" alt="${n.title}" class="w-10 h-14 object-cover rounded-md border border-dark-700 shrink-0">
+                            <img src="${n.cover_image || APP_BASE + 'assets/img/placeholder.jpg'}" alt="${n.title}" class="w-10 h-14 object-cover rounded-md border border-dark-700 shrink-0">
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center justify-between gap-1">
                                     <h5 class="text-xs font-bold text-white group-hover:text-brand-400 truncate transition-colors">${n.title}</h5>
@@ -272,11 +274,11 @@ function showAuthRequiredModal(title, message) {
                 <p class="text-xs text-slate-400 leading-relaxed">${message}</p>
             </div>
             <div class="space-y-2 pt-2">
-                <a href="/manhwa/login.php?redirect=${encodeURIComponent(currentUrl)}" 
+                <a href="${APP_BASE}login.php?redirect=${encodeURIComponent(currentUrl)}" 
                    class="w-full py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-brand-600/20 transition-all flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-arrow-right-to-bracket text-xs"></i> Sign In
+                     <i class="fa-solid fa-arrow-right-to-bracket text-xs"></i> Sign In
                 </a>
-                <a href="/manhwa/register.php" 
+                <a href="${APP_BASE}register.php" 
                    class="w-full py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-300 hover:text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2">
                     <i class="fa-solid fa-user-plus text-xs"></i> Create Account
                 </a>

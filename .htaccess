@@ -11,8 +11,8 @@ Options -Indexes
     Deny from all
 </FilesMatch>
 
-# 3. Block Direct HTTP Access to Cache JSON and Internal Data Files
-<FilesMatch "\.(json|log|sql|bak|example\.php)$">
+# 3. Block Direct HTTP Access to Sensitive Logs, SQL, Backups & Internal Files
+<FilesMatch "\.(log|sql|bak|example\.php)$">
     <IfModule !mod_authz_core.c>
         Order allow,deny
         Deny from all
@@ -22,16 +22,10 @@ Options -Indexes
     </IfModule>
 </FilesMatch>
 
-# Allow manifest.json specifically for PWA
-<Files "manifest.json">
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Allow from all
-    </IfModule>
-    <IfModule mod_authz_core.c>
-        Require all granted
-    </IfModule>
-</Files>
+# Proper MIME Type for Web App Manifest
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest json
+</IfModule>
 
 # 4. Block Dangerous HTTP Methods & Auto-Redirect to HTTPS
 <IfModule mod_rewrite.c>

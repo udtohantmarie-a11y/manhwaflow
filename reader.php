@@ -376,7 +376,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- MAIN READER CANVAS / STRIP -->
-    <div id="reader-canvas-wrapper" class="w-full p-0 m-0 overflow-x-hidden bg-black">
+    <div id="reader-canvas-wrapper" class="w-full p-0 m-0 overflow-x-hidden bg-black pt-[54px] sm:pt-[56px]">
         
         <?php if (empty($pages)): ?>
             <div class="max-w-md mx-auto my-20 p-8 rounded-2xl bg-dark-900 border border-dark-800 text-center space-y-4">
@@ -660,9 +660,89 @@ function toggleFullscreen() {
                 icon.classList.add('fa-expand');
             }
         }
-    });
-});
+// ==========================================
+// 4. Smooth Reader Scroll (Up & Down)
+// ==========================================
+function scrollReader(direction, source = '') {
+    const scrollAmount = Math.floor(window.innerHeight * 0.75);
+    if (direction === 'up') {
+        window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
+        showTapIndicator('up');
+        if (source) showScrollToast('Scroll Up', 'fa-chevron-up');
+    } else {
+        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        showTapIndicator('down');
+        if (source) showScrollToast('Scroll Down', 'fa-chevron-down');
+    }
+}
 
+// Visual Tap Indicator on screen edges
+let tapIndicatorTimer = null;
+function showTapIndicator(direction) {
+    const indLeft = document.getElementById('tap-indicator-left');
+    const indRight = document.getElementById('tap-indicator-right');
+    if (!indLeft || !indRight) return;
+
+    indLeft.classList.remove('opacity-100', 'scale-100');
+    indLeft.classList.add('opacity-0', 'scale-75');
+    indRight.classList.remove('opacity-100', 'scale-100');
+    indRight.classList.add('opacity-0', 'scale-75');
+
+    const targetEl = (direction === 'up' || direction === 'left') ? indLeft : indRight;
+    targetEl.classList.remove('opacity-0', 'scale-75');
+    targetEl.classList.add('opacity-100', 'scale-100');
+
+    clearTimeout(tapIndicatorTimer);
+    tapIndicatorTimer = setTimeout(() => {
+        targetEl.classList.remove('opacity-100', 'scale-100');
+        targetEl.classList.add('opacity-0', 'scale-75');
+    }, 280);
+}
+
+// Visual Feedback Toast
+let scrollToastTimer = null;
+function showScrollToast(text, iconClass = 'fa-chevron-up') {
+    const toast = document.getElementById('scroll-toast');
+    const toastText = document.getElementById('scroll-toast-text');
+    const toastIcon = document.getElementById('scroll-toast-icon');
+    if (!toast || !toastText) return;
+
+    toastText.textContent = text;
+    if (toastIcon) {
+        toastIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+    }
+
+    toast.classList.remove('opacity-0', '-translate-y-2');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    clearTimeout(scrollToastTimer);
+    scrollToastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+    }, 850);
+}
+
+// Distraction-free header toggle (Tap Center)
+function toggleReaderHeader() {
+    const header = document.getElementById('reader-sticky-bar');
+    const floatingControls = document.getElementById('floating-scroll-controls');
+    if (!header) return;
+    
+    isHeaderHidden = !isHeaderHidden;
+    if (isHeaderHidden) {
+        header.classList.add('-translate-y-full', 'pointer-events-none');
+        if (floatingControls) {
+            floatingControls.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+        }
+        showScrollToast('Immersive View: Images Only', 'fa-eye-slash');
+    } else {
+        header.classList.remove('-translate-y-full', 'pointer-events-none');
+        if (floatingControls) {
+            floatingControls.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+        }
+        showScrollToast('Menu Bar Shown', 'fa-eye');
+    }
+}
 
 // Gestures guide modal
 function openGestureGuide() {

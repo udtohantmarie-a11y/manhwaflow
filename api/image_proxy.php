@@ -146,3 +146,4 @@ if ($httpCode === 200 && !empty($imageData)) {
 // Return 404 if remote server returned error
 http_response_code($httpCode > 0 ? $httpCode : 502);
 exit('Failed to fetch image from upstream CDN.');
+

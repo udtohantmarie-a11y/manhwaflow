@@ -78,6 +78,7 @@ if (isset($_SESSION['user_id'])) {
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>assets/icons/icon-192.png">
     <!-- Custom Styles -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/custom.css">
+    <script>window.BASE_URL = <?= json_encode(BASE_URL) ?>;</script>
 </head>
 <body class="bg-dark-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-600 selection:text-white <?= $current_page === 'reader' ? 'reader-page bg-black' : '' ?>">
 
