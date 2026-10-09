@@ -72,8 +72,7 @@ if (isset($_SESSION['user_id'])) {
     <meta name="theme-color" content="#7c3aed">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="ManhwaFlow">
-    <link rel="manifest" href="<?= BASE_URL ?>manifest.json">
+    <link rel="manifest" href="<?= BASE_URL ?>manifest.json" crossorigin="use-credentials">
     <link rel="icon" type="image/svg+xml" href="<?= BASE_URL ?>assets/icons/icon.svg">
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>assets/icons/icon-192.png">
     <!-- Custom Styles -->

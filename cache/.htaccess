@@ -1,0 +1,4 @@
+# Deny direct HTTP access to all internal cache JSON and files
+Order deny,allow
+Deny from all
+

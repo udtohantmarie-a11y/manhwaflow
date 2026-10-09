@@ -660,6 +660,8 @@ function toggleFullscreen() {
                 icon.classList.add('fa-expand');
             }
         }
+    });
+});
 // ==========================================
 // 4. Smooth Reader Scroll (Up & Down)
 // ==========================================

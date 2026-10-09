@@ -1,5 +1,6 @@
 # Cache and temporary directories
-/cache/
+cache/*
+!cache/.htaccess
 *.log
 
 # Sensitive credentials & environment files (NEVER commit secrets to GitHub)
