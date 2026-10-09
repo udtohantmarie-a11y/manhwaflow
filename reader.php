@@ -389,6 +389,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="relative bg-black flex justify-center items-center">
                         <img src="<?= htmlspecialchars($p['image_url']) ?>" 
                              alt="Chapter <?= $chapter['chapter_number'] ?> - Page <?= $p['page_number'] ?>" 
+                             referrerpolicy="no-referrer"
                              loading="lazy"
                              decoding="async"
                              class="w-full h-auto object-contain">

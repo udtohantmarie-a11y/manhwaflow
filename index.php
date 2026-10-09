@@ -107,6 +107,7 @@ require_once __DIR__ . '/includes/header.php';
         <div class="absolute inset-0 z-0">
             <img src="<?= htmlspecialchars($heroManhwa['banner_image']) ?>" 
                  alt="<?= htmlspecialchars($heroManhwa['title']) ?>" 
+                 referrerpolicy="no-referrer"
                  class="w-full h-full object-cover object-center opacity-30 blur-sm scale-105 group-hover:scale-100 transition-transform duration-700">
             <div class="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-900/80 to-transparent"></div>
             <div class="absolute inset-0 bg-gradient-to-r from-dark-950 via-dark-950/70 to-transparent"></div>
@@ -117,6 +118,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="w-48 sm:w-56 shrink-0 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl shadow-brand-900/40 border border-dark-700/80 group-hover:border-brand-500/50 transition-all">
                 <img src="<?= htmlspecialchars($heroManhwa['cover_image']) ?>" 
                      alt="<?= htmlspecialchars($heroManhwa['title']) ?>" 
+                     referrerpolicy="no-referrer"
                      class="w-full h-full object-cover">
             </div>
 
@@ -282,6 +284,7 @@ require_once __DIR__ . '/includes/header.php';
                         <a href="<?= $cardUrl ?>" class="relative aspect-[2/3] overflow-hidden bg-dark-950 block">
                             <img src="<?= htmlspecialchars($coverUrl) ?>" 
                                  alt="<?= htmlspecialchars($title) ?>" 
+                                 referrerpolicy="no-referrer"
                                  loading="lazy"
                                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                             

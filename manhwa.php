@@ -149,6 +149,7 @@ require_once __DIR__ . '/includes/header.php';
     <div class="h-64 sm:h-80 w-full overflow-hidden relative border-b border-dark-800">
         <img src="<?= htmlspecialchars($manhwa['banner_image']) ?>" 
              alt="<?= htmlspecialchars($manhwa['title']) ?>" 
+             referrerpolicy="no-referrer"
              class="w-full h-full object-cover opacity-25 blur-md scale-105">
         <div class="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/70 to-transparent"></div>
     </div>
@@ -171,6 +172,7 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="aspect-[2/3] w-52 sm:w-64 lg:w-full mx-auto rounded-2xl overflow-hidden shadow-2xl border-2 border-dark-700 bg-dark-900 group">
                     <img src="<?= htmlspecialchars($manhwa['cover_image']) ?>" 
                          alt="<?= htmlspecialchars($manhwa['title']) ?>" 
+                         referrerpolicy="no-referrer"
                          class="w-full h-full object-cover">
                 </div>
 
