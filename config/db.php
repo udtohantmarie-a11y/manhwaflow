@@ -66,7 +66,8 @@ try {
 }
 
 function dieDatabaseError($e, $isLocalDev) {
-    $techError = $isLocalDev 
+    $showError = $isLocalDev || isset($_GET['debug_db']);
+    $techError = $showError 
         ? "<p style='color:#a1a1aa;font-size:12px;font-family:monospace;word-break:break-all;'>Technical Error: " . htmlspecialchars($e->getMessage()) . "</p>"
         : "<p style='color:#a1a1aa;font-size:12px;'>The server is currently unable to establish a database connection. Please try again later.</p>";
 

@@ -191,7 +191,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- Reading Progress Bar -->
-<div class="fixed top-16 left-0 right-0 h-1 bg-dark-900 z-50">
+<div class="fixed top-0 left-0 right-0 h-1 bg-dark-900 z-50 pointer-events-none">
     <div id="reading-progress" class="h-full bg-gradient-to-r from-brand-500 to-indigo-500 w-0"></div>
 </div>
 
@@ -204,7 +204,7 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <!-- Floating Action Feedback Toast (Volume & Gestures) -->
-<div id="scroll-toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 bg-dark-900/95 backdrop-blur-md border border-dark-700/80 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
+<div id="scroll-toast" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 bg-dark-900/95 backdrop-blur-md border border-dark-700/80 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
     <span id="scroll-toast-icon" class="text-brand-400"><i class="fa-solid fa-arrow-up"></i></span>
     <span id="scroll-toast-text">Scrolled Up</span>
 </div>
@@ -280,8 +280,8 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="min-h-screen bg-black">
 
-    <!-- Sticky Reader Control Bar -->
-    <div id="reader-sticky-bar" class="sticky top-16 z-40 bg-dark-900/95 backdrop-blur-md border-b border-dark-800 shadow-md transition-all duration-300">
+    <!-- Sticky / Floating Reader Control Bar -->
+    <div id="reader-sticky-bar" class="fixed top-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-md border-b border-dark-800 shadow-md transition-all duration-300 transform translate-y-0">
         <div class="max-w-6xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
             
             <!-- Left: Back to Manhwa details & Title -->
@@ -363,7 +363,7 @@ require_once __DIR__ . '/includes/header.php';
 
                 <!-- Fullscreen -->
                 <button onclick="toggleFullscreen()" class="px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors" title="Fullscreen (F)">
-                    <i class="fa-solid fa-expand"></i>
+                    <i id="fullscreen-icon" class="fa-solid fa-expand"></i>
                 </button>
             </div>
 
@@ -371,7 +371,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- MAIN READER CANVAS / STRIP -->
-    <div class="py-4">
+    <div id="reader-canvas-wrapper" class="w-full p-0 m-0 overflow-x-hidden bg-black">
         
         <?php if (empty($pages)): ?>
             <div class="max-w-md mx-auto my-20 p-8 rounded-2xl bg-dark-900 border border-dark-800 text-center space-y-4">
@@ -384,15 +384,15 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         <?php else: ?>
             <!-- Continuous Webtoon Strip Container -->
-            <div id="webtoon-strip" class="webtoon-strip-container shadow-2xl" style="max-width: 800px;">
+            <div id="webtoon-strip" class="webtoon-strip-container w-full mx-auto p-0 m-0 bg-black" style="max-width: 800px;">
                 <?php foreach ($pages as $p): ?>
-                    <div class="relative bg-black flex justify-center items-center">
+                    <div class="w-full bg-black leading-none p-0 m-0 text-[0px] select-none">
                         <img src="<?= htmlspecialchars($p['image_url']) ?>" 
                              alt="Chapter <?= $chapter['chapter_number'] ?> - Page <?= $p['page_number'] ?>" 
                              referrerpolicy="no-referrer"
                              loading="lazy"
                              decoding="async"
-                             class="w-full h-auto object-contain">
+                             class="w-full h-auto block p-0 m-0 border-0 outline-none select-none max-w-full">
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -528,14 +528,52 @@ require_once __DIR__ . '/includes/header.php';
 
 <script>
 // ==========================================
-// 1. Reading Progress Bar
+// 1. Reading Progress & Smart Auto-Hide Controls
 // ==========================================
+let lastScrollY = window.scrollY;
+let isHeaderHidden = false;
+let scrollTicking = false;
+
 window.addEventListener('scroll', () => {
+    // 1. Reading Progress Bar
     const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
     const progress = totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0;
     const progressBar = document.getElementById('reading-progress');
     if (progressBar) {
         progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+    }
+
+    // 2. Smart Auto-Hide: Scroll down hides menu so ONLY images are visible; Scroll up reveals
+    if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+            const currentScrollY = window.scrollY;
+            const header = document.getElementById('reader-sticky-bar');
+            const floatingControls = document.getElementById('floating-scroll-controls');
+
+            if (currentScrollY > lastScrollY + 10 && currentScrollY > 40) {
+                // Scrolling DOWN -> Hide controls for pure full-screen image immersion
+                if (header && !isHeaderHidden) {
+                    header.classList.add('-translate-y-full', 'pointer-events-none');
+                    isHeaderHidden = true;
+                }
+                if (floatingControls) {
+                    floatingControls.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+                }
+            } else if (currentScrollY < lastScrollY - 15 || currentScrollY <= 15) {
+                // Scrolling UP or Top -> Reveal controls smoothly
+                if (header && isHeaderHidden) {
+                    header.classList.remove('-translate-y-full', 'pointer-events-none');
+                    isHeaderHidden = false;
+                }
+                if (floatingControls) {
+                    floatingControls.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+                }
+            }
+
+            lastScrollY = Math.max(0, currentScrollY);
+            scrollTicking = false;
+        });
+        scrollTicking = true;
     }
 }, { passive: true });
 
@@ -558,87 +596,66 @@ function setReaderWidth(width, btnEl) {
 }
 
 // ==========================================
-// 3. Fullscreen Toggle
+// 3. Immersive Fullscreen (Mobile & Desktop)
 // ==========================================
 function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {});
+    const docEl = document.documentElement;
+    const icon = document.getElementById('fullscreen-icon');
+    const isFS = document.fullscreenElement || 
+                 document.webkitFullscreenElement || 
+                 document.mozFullScreenElement || 
+                 document.msFullscreenElement;
+
+    if (!isFS) {
+        if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+        }
+        showScrollToast('Fullscreen Mode (Images Only)', 'fa-expand');
+        if (icon) {
+            icon.classList.remove('fa-expand');
+            icon.classList.add('fa-compress');
+        }
     } else {
         if (document.exitFullscreen) {
-            document.exitFullscreen();
+            document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+        showScrollToast('Exited Fullscreen', 'fa-compress');
+        if (icon) {
+            icon.classList.remove('fa-compress');
+            icon.classList.add('fa-expand');
         }
     }
 }
 
-// ==========================================
-// 4. Smooth Reader Scroll (Up & Down)
-// ==========================================
-function scrollReader(direction, source = '') {
-    const scrollAmount = Math.floor(window.innerHeight * 0.75);
-    if (direction === 'up') {
-        window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
-        showTapIndicator('up');
-        if (source) showScrollToast('Scroll Up', 'fa-chevron-up');
-    } else {
-        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-        showTapIndicator('down');
-        if (source) showScrollToast('Scroll Down', 'fa-chevron-down');
-    }
-}
+// Sync fullscreen button icon with browser changes
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+    document.addEventListener(evt, () => {
+        const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+        const icon = document.getElementById('fullscreen-icon');
+        if (icon) {
+            if (isFS) {
+                icon.classList.remove('fa-expand');
+                icon.classList.add('fa-compress');
+            } else {
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
+        }
+    });
+});
 
-// Visual Tap Indicator on screen edges
-let tapIndicatorTimer = null;
-function showTapIndicator(direction) {
-    const indLeft = document.getElementById('tap-indicator-left');
-    const indRight = document.getElementById('tap-indicator-right');
-    if (!indLeft || !indRight) return;
-
-    indLeft.classList.remove('opacity-100', 'scale-100');
-    indLeft.classList.add('opacity-0', 'scale-75');
-    indRight.classList.remove('opacity-100', 'scale-100');
-    indRight.classList.add('opacity-0', 'scale-75');
-
-    const targetEl = (direction === 'up' || direction === 'left') ? indLeft : indRight;
-    targetEl.classList.remove('opacity-0', 'scale-75');
-    targetEl.classList.add('opacity-100', 'scale-100');
-
-    clearTimeout(tapIndicatorTimer);
-    tapIndicatorTimer = setTimeout(() => {
-        targetEl.classList.remove('opacity-100', 'scale-100');
-        targetEl.classList.add('opacity-0', 'scale-75');
-    }, 280);
-}
-
-// Visual Feedback Toast
-let scrollToastTimer = null;
-function showScrollToast(text, iconClass = 'fa-chevron-up') {
-    const toast = document.getElementById('scroll-toast');
-    const toastText = document.getElementById('scroll-toast-text');
-    const toastIcon = document.getElementById('scroll-toast-icon');
-    if (!toast || !toastText) return;
-
-    toastText.textContent = text;
-    if (toastIcon) {
-        toastIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
-    }
-
-    toast.classList.remove('opacity-0', '-translate-y-2');
-    toast.classList.add('opacity-100', 'translate-y-0');
-
-    clearTimeout(scrollToastTimer);
-    scrollToastTimer = setTimeout(() => {
-        toast.classList.remove('opacity-100', 'translate-y-0');
-        toast.classList.add('opacity-0', '-translate-y-2');
-    }, 850);
-}
-
-// Distraction-free header toggle
-function toggleReaderHeader() {
-    const header = document.getElementById('reader-sticky-bar');
-    if (!header) return;
-    const isHidden = header.classList.toggle('-translate-y-full');
-    showScrollToast(isHidden ? 'Menu Hidden' : 'Menu Shown', isHidden ? 'fa-eye-slash' : 'fa-eye');
-}
 
 // Gestures guide modal
 function openGestureGuide() {

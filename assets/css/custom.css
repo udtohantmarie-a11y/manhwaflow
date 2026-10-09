@@ -27,20 +27,67 @@
 /* Webtoon Strip Mode Styles */
 .webtoon-strip-container {
     margin: 0 auto;
+    width: 100%;
+    max-width: 800px;
+    background-color: #000000;
     transition: max-width 0.25s ease-in-out;
+}
+
+.webtoon-strip-container > div {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+    background-color: #000000 !important;
 }
 
 .webtoon-strip-container img,
 .webtoon-strip-container svg {
-    display: block;
-    width: 100%;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    line-height: 0;
-    vertical-align: bottom;
-    user-select: none;
-    -webkit-user-drag: none;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    outline: none !important;
+    line-height: 0 !important;
+    vertical-align: bottom !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-user-drag: none !important;
+    -webkit-touch-callout: none !important;
+}
+
+/* Mobile Edge-to-Edge Responsive Reader */
+@media (max-width: 768px) {
+    body.reader-page {
+        overflow-x: hidden !important;
+        background-color: #000000 !important;
+    }
+    .webtoon-strip-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    #reader-canvas-wrapper {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    #reader-sticky-bar {
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+}
+
+/* Browser Fullscreen Canvas Support */
+:fullscreen,
+:-webkit-full-screen,
+:-moz-full-screen,
+:-ms-fullscreen {
+    background-color: #000000 !important;
+    overflow-y: auto !important;
 }
 
 /* Reading Progress Bar */

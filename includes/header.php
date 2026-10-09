@@ -79,9 +79,10 @@ if (isset($_SESSION['user_id'])) {
     <!-- Custom Styles -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/custom.css">
 </head>
-<body class="bg-dark-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-600 selection:text-white">
+<body class="bg-dark-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-600 selection:text-white <?= $current_page === 'reader' ? 'reader-page bg-black' : '' ?>">
 
     <!-- Top Navigation Bar -->
+    <?php if (empty($hide_main_header) && $current_page !== 'reader'): ?>
     <header class="sticky top-0 z-50 bg-dark-900/90 backdrop-blur-md border-b border-dark-800 transition-all duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16 gap-4">
@@ -279,6 +280,7 @@ if (isset($_SESSION['user_id'])) {
             </div>
         </div>
     </header>
+    <?php endif; ?>
 
     <main class="flex-grow">
 

@@ -4,6 +4,10 @@
     </main>
 
     <!-- Professional Business Footer -->
+    <?php 
+    $current_page = $current_page ?? basename($_SERVER['PHP_SELF'], '.php');
+    if (empty($hide_main_footer) && $current_page !== 'reader'): 
+    ?>
     <footer class="bg-dark-900 border-t border-dark-800 mt-20 pt-16 pb-12 text-slate-400 text-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-10 pb-12 border-b border-dark-800">
@@ -72,6 +76,7 @@
             </div>
         </div>
     </footer>
+    <?php endif; ?>
 
     <!-- Main JS -->
     <script src="<?= BASE_URL ?>assets/js/main.js"></script>
