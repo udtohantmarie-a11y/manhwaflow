@@ -196,32 +196,18 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <!-- Reading Progress Bar -->
-<div class="fixed top-0 left-0 right-0 h-1 bg-dark-900 z-50 pointer-events-none">
+<div id="reading-progress-container" class="fixed top-0 left-0 right-0 h-1 bg-dark-900 z-50 pointer-events-none transition-opacity duration-300">
     <div id="reading-progress" class="h-full bg-gradient-to-r from-brand-500 to-indigo-500 w-0"></div>
-</div>
-
-<!-- Screen Tap Visual Indicators (Left = Up, Right = Down) -->
-<div id="tap-indicator-left" class="fixed top-1/2 left-3 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 flex items-center justify-center w-12 h-12 rounded-full bg-brand-600/40 border border-brand-500/60 text-white text-lg backdrop-blur-md shadow-2xl scale-75">
-    <i class="fa-solid fa-chevron-up"></i>
-</div>
-<div id="tap-indicator-right" class="fixed top-1/2 right-3 -translate-y-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 flex items-center justify-center w-12 h-12 rounded-full bg-brand-600/40 border border-brand-500/60 text-white text-lg backdrop-blur-md shadow-2xl scale-75">
-    <i class="fa-solid fa-chevron-down"></i>
-</div>
-
-<!-- Floating Action Feedback Toast (Volume & Gestures) -->
-<div id="scroll-toast" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-200 bg-dark-900/95 backdrop-blur-md border border-dark-700/80 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
-    <span id="scroll-toast-icon" class="text-brand-400"><i class="fa-solid fa-arrow-up"></i></span>
-    <span id="scroll-toast-text">Scrolled Up</span>
 </div>
 
 <!-- Floating One-Hand Quick Scroll Buttons (Mobile & Desktop) -->
 <div id="floating-scroll-controls" class="fixed bottom-6 right-4 z-40 flex flex-col gap-2.5 transition-all duration-300">
-    <button onclick="scrollReader('up', 'Floating Button')" 
+    <button onclick="scrollReader('up')" 
             class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
             title="Scroll Up">
         <i class="fa-solid fa-chevron-up text-sm text-brand-400"></i>
     </button>
-    <button onclick="scrollReader('down', 'Floating Button')" 
+    <button onclick="scrollReader('down')" 
             class="w-11 h-11 rounded-full bg-dark-900/90 backdrop-blur-md border border-dark-700 hover:border-brand-500 text-slate-300 hover:text-white shadow-2xl flex items-center justify-center active:scale-90 transition-all"
             title="Scroll Down">
         <i class="fa-solid fa-chevron-down text-sm text-brand-400"></i>
@@ -245,11 +231,9 @@ require_once __DIR__ . '/includes/header.php';
                     <i class="fa-solid fa-hand-pointer"></i>
                 </div>
                 <div>
-                    <h4 class="font-bold text-white">Screen Tap Zones</h4>
+                    <h4 class="font-bold text-white">Tap Screen Anywhere</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        &bull; <strong>Left side (35%):</strong> Scroll Up<br>
-                        &bull; <strong>Right side (35%):</strong> Scroll Down<br>
-                        &bull; <strong>Center area:</strong> Show / Hide Menu Bar
+                        Tap on the comic screen to instantly <strong>hide or show</strong> the menu bar, controls, and buttons for an edge-to-edge full-screen reading experience.
                     </p>
                 </div>
             </div>
@@ -260,8 +244,8 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h4 class="font-bold text-white">Hardware Volume Keys</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        &bull; <strong>Volume Up:</strong> Scroll Up<br>
-                        &bull; <strong>Volume Down:</strong> Scroll Down
+                        &bull; <strong>Volume Up:</strong> Scroll Up smoothly<br>
+                        &bull; <strong>Volume Down:</strong> Scroll Down smoothly
                     </p>
                 </div>
             </div>
@@ -272,7 +256,7 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <h4 class="font-bold text-white">Floating Thumb Buttons</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        Tap the <strong>▲ and ▼ buttons</strong> below for fast one-hand thumb scrolling.
+                        Tap the <strong>▲ and ▼ buttons</strong> for easy one-hand scrolling (hides when menu is hidden).
                     </p>
                 </div>
             </div>
@@ -623,7 +607,6 @@ function toggleFullscreen() {
         } else if (docEl.msRequestFullscreen) {
             docEl.msRequestFullscreen();
         }
-        showScrollToast('Fullscreen Mode (Images Only)', 'fa-expand');
         if (icon) {
             icon.classList.remove('fa-expand');
             icon.classList.add('fa-compress');
@@ -638,7 +621,6 @@ function toggleFullscreen() {
         } else if (document.msExitFullscreen) {
             document.msExitFullscreen();
         }
-        showScrollToast('Exited Fullscreen', 'fa-compress');
         if (icon) {
             icon.classList.remove('fa-compress');
             icon.classList.add('fa-expand');
@@ -678,71 +660,44 @@ function scrollReader(direction, source = '') {
     }
 }
 
-// Visual Tap Indicator on screen edges
-let tapIndicatorTimer = null;
-function showTapIndicator(direction) {
-    const indLeft = document.getElementById('tap-indicator-left');
-    const indRight = document.getElementById('tap-indicator-right');
-    if (!indLeft || !indRight) return;
-
-    indLeft.classList.remove('opacity-100', 'scale-100');
-    indLeft.classList.add('opacity-0', 'scale-75');
-    indRight.classList.remove('opacity-100', 'scale-100');
-    indRight.classList.add('opacity-0', 'scale-75');
-
-    const targetEl = (direction === 'up' || direction === 'left') ? indLeft : indRight;
-    targetEl.classList.remove('opacity-0', 'scale-75');
-    targetEl.classList.add('opacity-100', 'scale-100');
-
-    clearTimeout(tapIndicatorTimer);
-    tapIndicatorTimer = setTimeout(() => {
-        targetEl.classList.remove('opacity-100', 'scale-100');
-        targetEl.classList.add('opacity-0', 'scale-75');
-    }, 280);
-}
-
-// Visual Feedback Toast
-let scrollToastTimer = null;
-function showScrollToast(text, iconClass = 'fa-chevron-up') {
-    const toast = document.getElementById('scroll-toast');
-    const toastText = document.getElementById('scroll-toast-text');
-    const toastIcon = document.getElementById('scroll-toast-icon');
-    if (!toast || !toastText) return;
-
-    toastText.textContent = text;
-    if (toastIcon) {
-        toastIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+// ==========================================
+// 4. Smooth Reader Scroll (Up & Down)
+// ==========================================
+function scrollReader(direction) {
+    const scrollAmount = Math.max(350, Math.floor(window.innerHeight * 0.75));
+    if (direction === 'up') {
+        window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
+    } else {
+        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
     }
-
-    toast.classList.remove('opacity-0', '-translate-y-2');
-    toast.classList.add('opacity-100', 'translate-y-0');
-
-    clearTimeout(scrollToastTimer);
-    scrollToastTimer = setTimeout(() => {
-        toast.classList.remove('opacity-100', 'translate-y-0');
-        toast.classList.add('opacity-0', '-translate-y-2');
-    }, 850);
 }
 
-// Distraction-free header toggle (Tap Center)
+// Distraction-free menu bar toggle (Screen Tap)
+let isHeaderHidden = false;
+
 function toggleReaderHeader() {
     const header = document.getElementById('reader-sticky-bar');
     const floatingControls = document.getElementById('floating-scroll-controls');
+    const progressContainer = document.getElementById('reading-progress-container');
     if (!header) return;
     
     isHeaderHidden = !isHeaderHidden;
     if (isHeaderHidden) {
         header.classList.add('-translate-y-full', 'pointer-events-none');
         if (floatingControls) {
-            floatingControls.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+            floatingControls.classList.add('opacity-0', 'pointer-events-none', 'translate-y-6');
         }
-        showScrollToast('Immersive View: Images Only', 'fa-eye-slash');
+        if (progressContainer) {
+            progressContainer.classList.add('opacity-0');
+        }
     } else {
         header.classList.remove('-translate-y-full', 'pointer-events-none');
         if (floatingControls) {
-            floatingControls.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+            floatingControls.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-6');
         }
-        showScrollToast('Menu Bar Shown', 'fa-eye');
+        if (progressContainer) {
+            progressContainer.classList.remove('opacity-0');
+        }
     }
 }
 
@@ -758,7 +713,7 @@ function closeGestureGuide() {
 }
 
 // ==========================================
-// 5. Screen Tap Zones (Left = Up, Right = Down, Center = Menu)
+// 5. Screen Tap to Toggle Menu Bar (Immersive Reading)
 // ==========================================
 let touchStartX = 0;
 let touchStartY = 0;
@@ -779,75 +734,67 @@ window.addEventListener('touchend', (e) => {
     const diffX = Math.abs(touchEndX - touchStartX);
     const diffY = Math.abs(touchEndY - touchStartY);
 
-    // If dragged/swiped more than 15px or held longer than 350ms, it's a drag/swipe NOT a tap
+    // If dragged/swiped more than 15px or held longer than 350ms, it's a drag/swipe/scroll, NOT a tap
     if (diffX > 15 || diffY > 15 || duration > 350) return;
 
-    // Do not trigger tap-scroll when user clicks buttons, links, inputs, or comments
+    // Do not toggle when tapping interactive controls (buttons, links, inputs, dropdowns)
     const target = e.target;
     if (target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls, .btn-like, form')) {
         return;
     }
 
-    handleScreenTap(touchEndX);
+    toggleReaderHeader();
 }, { passive: true });
 
-function handleScreenTap(clientX) {
-    const screenWidth = window.innerWidth;
-    const leftBoundary = screenWidth * 0.35;   // Left 35% -> Up
-    const rightBoundary = screenWidth * 0.65;  // Right 35% -> Down
-
-    if (clientX < leftBoundary) {
-        scrollReader('up', 'Tap Up');
-    } else if (clientX > rightBoundary) {
-        scrollReader('down', 'Tap Down');
-    } else {
-        toggleReaderHeader();
-    }
-}
-
-// Optional desktop click on reader container
+// Desktop click on reader container to toggle menu bar
 const webtoonContainer = document.getElementById('webtoon-strip');
 if (webtoonContainer) {
     webtoonContainer.addEventListener('click', (e) => {
         if (e.pointerType === 'touch') return; // Handled by touch events
-        if (e.target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls')) {
+        if (e.target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls, form')) {
             return;
         }
-        handleScreenTap(e.clientX);
+        toggleReaderHeader();
     });
 }
 
 // ==========================================
 // 6. Hardware Volume Keys & Keyboard Navigation
 // ==========================================
-document.addEventListener('keydown', (e) => {
+function handleReaderKeys(e) {
     // Avoid triggering when user is in input or select
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
-    // A. Phone Hardware Volume Keys
+    // A. Phone Hardware Volume Keys (Volume Up = Scroll Up, Volume Down = Scroll Down)
     const isVolumeUp = e.key === 'VolumeUp' || 
                        e.key === 'AudioVolumeUp' || 
                        e.code === 'AudioVolumeUp' || 
                        e.code === 'VolumeUp' || 
                        e.keyCode === 175 || 
-                       e.keyCode === 24;
+                       e.keyCode === 24 ||
+                       e.which === 175 ||
+                       e.which === 24;
 
     const isVolumeDown = e.key === 'VolumeDown' || 
                          e.key === 'AudioVolumeDown' || 
                          e.code === 'AudioVolumeDown' || 
                          e.code === 'VolumeDown' || 
                          e.keyCode === 174 || 
-                         e.keyCode === 25;
+                         e.keyCode === 25 ||
+                         e.which === 174 ||
+                         e.which === 25;
 
     if (isVolumeUp) {
-        e.preventDefault();
-        scrollReader('up', 'Volume Up');
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        scrollReader('up');
         return;
     }
 
     if (isVolumeDown) {
-        e.preventDefault();
-        scrollReader('down', 'Volume Down');
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        scrollReader('down');
         return;
     }
 
@@ -859,23 +806,33 @@ document.addEventListener('keydown', (e) => {
         const nextBtn = document.getElementById('btn-next-chapter');
         if (nextBtn) nextBtn.click();
     } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-        e.preventDefault();
-        scrollReader('up', 'Key Up');
+        if (e.cancelable) e.preventDefault();
+        scrollReader('up');
     } else if (e.key === 'ArrowDown' || e.key === 'PageDown') {
-        e.preventDefault();
-        scrollReader('down', 'Key Down');
+        if (e.cancelable) e.preventDefault();
+        scrollReader('down');
     } else if (e.key === ' ' && !e.shiftKey) {
-        e.preventDefault();
-        scrollReader('down', 'Space');
+        if (e.cancelable) e.preventDefault();
+        scrollReader('down');
     } else if (e.key === ' ' && e.shiftKey) {
-        e.preventDefault();
-        scrollReader('up', 'Shift + Space');
+        if (e.cancelable) e.preventDefault();
+        scrollReader('up');
     } else if (e.key.toLowerCase() === 'f') {
         toggleFullscreen();
     } else if (e.key.toLowerCase() === 'm') {
         toggleReaderHeader();
     }
-});
+}
+
+window.addEventListener('keydown', handleReaderKeys, { capture: true, passive: false });
+window.addEventListener('keyup', (e) => {
+    const isVol = [174, 175, 24, 25].includes(e.keyCode) || 
+                  ['AudioVolumeUp', 'AudioVolumeDown', 'VolumeUp', 'VolumeDown'].includes(e.key);
+    if (isVol) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+    }
+}, { capture: true, passive: false });
 
 // 5. Submit Chapter Comment
 async function submitComment(e) {
