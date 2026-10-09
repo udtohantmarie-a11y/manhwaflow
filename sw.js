@@ -1,23 +1,25 @@
 // sw.js - ManhwaFlow PWA Service Worker
-const CACHE_NAME = 'manhwaflow-cache-v1';
+const CACHE_NAME = 'manhwaflow-v2';
 const STATIC_ASSETS = [
-    './',
-    './index.php',
-    './manifest.json',
-    './assets/icons/icon.svg',
-    './assets/icons/icon-192.png',
-    './assets/icons/icon-512.png',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-    'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap'
+    '/',
+    '/index.php',
+    '/manifest.json',
+    '/assets/icons/icon-192.png',
+    '/assets/icons/icon-512.png',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'
 ];
 
-// Install Event - Pre-cache critical shell assets
+// Install Event - Pre-cache shell assets safely
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(STATIC_ASSETS).catch((err) => {
-                console.warn('[PWA] Cache addAll warning:', err);
-            });
+        caches.open(CACHE_NAME).then(async (cache) => {
+            for (const asset of STATIC_ASSETS) {
+                try {
+                    await cache.add(asset);
+                } catch (e) {
+                    // Ignore individual cache failure to prevent install rejection
+                }
+            }
         }).then(() => self.skipWaiting())
     );
 });
@@ -37,14 +39,14 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch Event - Network first with Cache fallback for reliable live manhwa updates
+// Fetch Event - Network first with Cache fallback
 self.addEventListener('fetch', (event) => {
     const request = event.request;
 
     // Only handle GET requests
     if (request.method !== 'GET') return;
 
-    // Do not cache API or ad network requests
+    // Skip API, analytics, or ad network requests
     if (request.url.includes('/api/') || request.url.includes('monetag') || request.url.includes('uplcm.com')) {
         return;
     }
@@ -52,7 +54,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         fetch(request)
             .then((networkResponse) => {
-                // If valid response, clone and cache static assets
                 if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
                     const responseClone = networkResponse.clone();
                     caches.open(CACHE_NAME).then((cache) => {
@@ -62,16 +63,14 @@ self.addEventListener('fetch', (event) => {
                 return networkResponse;
             })
             .catch(() => {
-                // Offline fallback
                 return caches.match(request).then((cachedResponse) => {
                     if (cachedResponse) {
                         return cachedResponse;
                     }
                     if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
-                        return caches.match('./index.php');
+                        return caches.match('/index.php');
                     }
                 });
             })
     );
 });
-
