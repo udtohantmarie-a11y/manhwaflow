@@ -673,8 +673,6 @@ function scrollReader(direction) {
 }
 
 // Distraction-free menu bar toggle (Screen Tap)
-let isHeaderHidden = false;
-
 function toggleReaderHeader() {
     const header = document.getElementById('reader-sticky-bar');
     const floatingControls = document.getElementById('floating-scroll-controls');
