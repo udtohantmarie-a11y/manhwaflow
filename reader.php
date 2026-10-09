@@ -231,9 +231,11 @@ require_once __DIR__ . '/includes/header.php';
                     <i class="fa-solid fa-hand-pointer"></i>
                 </div>
                 <div>
-                    <h4 class="font-bold text-white">Tap Screen Anywhere</h4>
+                    <h4 class="font-bold text-white">Screen Tap Zones</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        Tap on the comic screen to instantly <strong>hide or show</strong> the menu bar, controls, and buttons for an edge-to-edge full-screen reading experience.
+                        &bull; <strong>Left side (35%):</strong> Tap to Scroll Up<br>
+                        &bull; <strong>Right side (35%):</strong> Tap to Scroll Down<br>
+                        &bull; <strong>Center area:</strong> Tap to Show / Hide Menu Bar
                     </p>
                 </div>
             </div>
@@ -647,22 +649,6 @@ function toggleFullscreen() {
 // ==========================================
 // 4. Smooth Reader Scroll (Up & Down)
 // ==========================================
-function scrollReader(direction, source = '') {
-    const scrollAmount = Math.floor(window.innerHeight * 0.75);
-    if (direction === 'up') {
-        window.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
-        showTapIndicator('up');
-        if (source) showScrollToast('Scroll Up', 'fa-chevron-up');
-    } else {
-        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-        showTapIndicator('down');
-        if (source) showScrollToast('Scroll Down', 'fa-chevron-down');
-    }
-}
-
-// ==========================================
-// 4. Smooth Reader Scroll (Up & Down)
-// ==========================================
 function scrollReader(direction) {
     const scrollAmount = Math.max(350, Math.floor(window.innerHeight * 0.75));
     if (direction === 'up') {
@@ -735,16 +721,30 @@ window.addEventListener('touchend', (e) => {
     // If dragged/swiped more than 15px or held longer than 350ms, it's a drag/swipe/scroll, NOT a tap
     if (diffX > 15 || diffY > 15 || duration > 350) return;
 
-    // Do not toggle when tapping interactive controls (buttons, links, inputs, dropdowns)
+    // Do not trigger when tapping interactive controls (buttons, links, inputs, dropdowns)
     const target = e.target;
     if (target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls, .btn-like, form')) {
         return;
     }
 
-    toggleReaderHeader();
+    handleScreenTap(touchEndX);
 }, { passive: true });
 
-// Desktop click on reader container to toggle menu bar
+function handleScreenTap(clientX) {
+    const screenWidth = window.innerWidth;
+    const leftBoundary = screenWidth * 0.35;   // Left 35% -> Clickable Scroll Up
+    const rightBoundary = screenWidth * 0.65;  // Right 35% -> Clickable Scroll Down
+
+    if (clientX < leftBoundary) {
+        scrollReader('up');
+    } else if (clientX > rightBoundary) {
+        scrollReader('down');
+    } else {
+        toggleReaderHeader(); // Center area -> Toggle Menu Bar & Controls
+    }
+}
+
+// Desktop click on reader container to trigger tap zones
 const webtoonContainer = document.getElementById('webtoon-strip');
 if (webtoonContainer) {
     webtoonContainer.addEventListener('click', (e) => {
@@ -752,7 +752,7 @@ if (webtoonContainer) {
         if (e.target.closest('button, a, input, textarea, select, #comments-section, #reader-sticky-bar, #gesture-guide-modal, #floating-scroll-controls, form')) {
             return;
         }
-        toggleReaderHeader();
+        handleScreenTap(e.clientX);
     });
 }
 
