@@ -344,7 +344,7 @@ $rankData = calcRank($totalEarned);
             </div>
             
             <!-- Facebook Action Button -->
-            <a href="https://www.facebook.com" target="_blank" rel="noopener noreferrer"
+            <a href="https://www.facebook.com/profile.php?id=61594942004447" target="_blank" rel="noopener noreferrer"
                class="px-5 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs sm:text-sm shadow-lg shadow-blue-900/40 transition-all flex items-center gap-2 self-start md:self-auto shrink-0">
                 <i class="fa-brands fa-facebook text-base"></i>
                 <span>Visit Facebook Page &amp; Follow</span>

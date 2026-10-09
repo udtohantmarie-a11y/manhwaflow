@@ -23,10 +23,14 @@
                     <p class="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-sm">
                         ManhwaFlow is a premier digital reading platform delivering seamless high-definition webtoons and comic series worldwide. Optimized for continuous mobile and desktop vertical reading.
                     </p>
-                    <div class="flex items-center gap-3 pt-2 text-slate-400 text-xs">
+                    <div class="flex items-center gap-3 pt-2 text-slate-400 text-xs flex-wrap">
                         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-dark-850 border border-dark-750 text-slate-300 font-medium">
                             <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Global Content Network Active
                         </span>
+                        <a href="https://www.facebook.com/profile.php?id=61594942004447" target="_blank" rel="noopener noreferrer"
+                           class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:text-blue-300 font-semibold transition-all">
+                            <i class="fa-brands fa-facebook-f text-xs"></i> Official Facebook Page
+                        </a>
                     </div>
                 </div>
 
