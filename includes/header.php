@@ -72,9 +72,14 @@ if (isset($_SESSION['user_id'])) {
     <meta name="theme-color" content="#7c3aed">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="<?= BASE_URL ?>manifest.json" crossorigin="use-credentials">
+    <!-- Favicon & PWA Icons (Matching Header MF Logo) -->
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>assets/icons/icon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= BASE_URL ?>assets/icons/icon-16.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= BASE_URL ?>assets/icons/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="<?= BASE_URL ?>assets/icons/icon.svg">
-    <link rel="apple-touch-icon" href="<?= BASE_URL ?>assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= BASE_URL ?>assets/icons/apple-touch-icon.png">
+    <link rel="manifest" href="<?= BASE_URL ?>manifest.json" crossorigin="use-credentials">
     <!-- Monetag Verification -->
     <meta name="monetag" content="8c4d96da1a52d116af2a385f8bc4a6b5">
     <!-- Custom Styles -->
