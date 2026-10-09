@@ -14,8 +14,17 @@ function initMobileMenu() {
     const toggleBtn = document.getElementById('mobile-toggle');
     const mobileMenu = document.getElementById('mobile-menu');
     if (toggleBtn && mobileMenu) {
-        toggleBtn.addEventListener('click', () => {
-            mobileMenu.classList.toggle('hidden');
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = mobileMenu.classList.toggle('hidden');
+            const icon = toggleBtn.querySelector('i');
+            if (icon) {
+                if (isHidden) {
+                    icon.className = 'fa-solid fa-bars text-base sm:text-lg';
+                } else {
+                    icon.className = 'fa-solid fa-xmark text-base sm:text-lg text-rose-400';
+                }
+            }
         });
     }
 }
@@ -93,6 +102,7 @@ function initBookmarkSystem() {
     const mobileBadge = document.getElementById('mobile-bookmark-badge');
 
     const updateBadgeCount = (count) => {
+        const menuBadge = document.getElementById('mobile-menu-bookmark-badge');
         [badge, mobileBadge].forEach(b => {
             if (!b) return;
             if (count > 0) {
@@ -102,6 +112,9 @@ function initBookmarkSystem() {
                 b.classList.add('hidden');
             }
         });
+        if (menuBadge) {
+            menuBadge.textContent = count > 0 ? `${count} Series` : 'Library';
+        }
     };
 
     const setBtnUi = (isBookmarked) => {
