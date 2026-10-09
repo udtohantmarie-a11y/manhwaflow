@@ -51,7 +51,7 @@ $apiSearchQuery = trim($_GET['q'] ?? '');
 $liveManhwas = [];
 
 if (!empty($apiSearchQuery)) {
-    $searchRes = MangaDexAPI::searchPaged($apiSearchQuery, 16, 1, false);
+    $searchRes = MangaDexAPI::searchPaged($apiSearchQuery, 16, 1, true);
     $liveManhwas = $searchRes['items'] ?? [];
 } else {
     $liveManhwas = MangaDexAPI::getPopularLive(12);

@@ -161,12 +161,13 @@ class MangaDexAPI {
     }
 
     /**
-     * Get Real-time Latest Uploaded Series with English Translations (Paged)
+     * Get Real-time Latest Uploaded Series with English Translations (Paged) - Strictly Korean Manhwa
      */
     public static function getLatestLiveUpdatesPaged($limit = 30, $page = 1) {
         $offset = max(0, ($page - 1) * $limit);
         $params = [
             'availableTranslatedLanguage' => ['en'],
+            'originalLanguage' => ['ko'],
             'order' => ['latestUploadedChapter' => 'desc'],
             'limit' => $limit,
             'offset' => $offset,
@@ -200,11 +201,12 @@ class MangaDexAPI {
     }
 
     /**
-     * Get Popular Series on MangaDex Live with English Translations
+     * Get Popular Series on MangaDex Live with English Translations - Strictly Korean Manhwa
      */
     public static function getPopularLive($limit = 12) {
         $params = [
             'availableTranslatedLanguage' => ['en'],
+            'originalLanguage' => ['ko'],
             'order' => ['followedCount' => 'desc'],
             'limit' => $limit,
             'includes' => ['cover_art', 'author'],
@@ -259,7 +261,7 @@ class MangaDexAPI {
     ];
 
     /**
-     * Get Series Filtered by Genre / Tag (Paged across full MangaDex library)
+     * Get Series Filtered by Genre / Tag (Paged across full MangaDex library) - Strictly Korean Manhwa
      */
     public static function getByGenrePaged($genreSlug, $limit = 30, $page = 1) {
         $slugClean = strtolower(trim($genreSlug));
@@ -268,6 +270,7 @@ class MangaDexAPI {
 
         $params = [
             'availableTranslatedLanguage' => ['en'],
+            'originalLanguage' => ['ko'],
             'limit' => $limit,
             'offset' => $offset,
             'includes' => ['cover_art', 'author'],
@@ -278,7 +281,7 @@ class MangaDexAPI {
         if ($tagId) {
             $params['includedTags'] = [$tagId];
         } else {
-            return self::searchPaged(str_replace('-', ' ', $genreSlug), $limit, $page);
+            return self::searchPaged(str_replace('-', ' ', $genreSlug), $limit, $page, true);
         }
 
         $res = self::request('/manga', $params, 600); // 10-minute cache per genre page
@@ -307,23 +310,20 @@ class MangaDexAPI {
     }
 
     /**
-     * Live Search MangaDex with English Translations (Paged)
+     * Live Search MangaDex with English Translations (Paged) - Strictly Korean Manhwa
      */
-    public static function searchPaged($query, $limit = 30, $page = 1, $onlyKorean = false) {
+    public static function searchPaged($query, $limit = 30, $page = 1, $onlyKorean = true) {
         $offset = max(0, ($page - 1) * $limit);
         $params = [
             'title' => $query,
             'availableTranslatedLanguage' => ['en'],
+            'originalLanguage' => ['ko'],
             'limit' => $limit,
             'offset' => $offset,
             'includes' => ['cover_art', 'author'],
             'order' => ['relevance' => 'desc'],
             'contentRating' => ['safe', 'suggestive']
         ];
-
-        if ($onlyKorean) {
-            $params['originalLanguage'] = ['ko'];
-        }
 
         $res = self::request('/manga', $params, 300);
         if (!$res || empty($res['data'])) {
@@ -345,7 +345,7 @@ class MangaDexAPI {
         ];
     }
 
-    public static function search($query, $limit = 30, $page = 1, $onlyKorean = false) {
+    public static function search($query, $limit = 30, $page = 1, $onlyKorean = true) {
         $res = self::searchPaged($query, $limit, $page, $onlyKorean);
         return $res['items'];
     }

@@ -48,7 +48,7 @@ function getPageUrl($p, $search, $genreSlug) {
 // Fetch items directly from real-time library with pagination
 $pagedResult = [];
 if (!empty($search)) {
-    $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, false);
+    $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, true);
 } elseif (!empty($genreSlug)) {
     $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page);
 } else {
