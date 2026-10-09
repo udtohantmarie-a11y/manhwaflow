@@ -75,6 +75,8 @@ if (isset($_SESSION['user_id'])) {
     <link rel="manifest" href="<?= BASE_URL ?>manifest.json" crossorigin="use-credentials">
     <link rel="icon" type="image/svg+xml" href="<?= BASE_URL ?>assets/icons/icon.svg">
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>assets/icons/icon-192.png">
+    <!-- Monetag Verification -->
+    <meta name="monetag" content="8c4d96da1a52d116af2a385f8bc4a6b5">
     <!-- Custom Styles -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/custom.css">
     <script>window.BASE_URL = <?= json_encode(BASE_URL) ?>;</script>
