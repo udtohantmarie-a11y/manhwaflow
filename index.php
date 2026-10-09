@@ -7,6 +7,10 @@ $pdo = getPdo();
 
 $search = isset($_GET['q']) ? trim($_GET['q']) : '';
 $genreSlug = isset($_GET['genre']) ? trim($_GET['genre']) : '';
+$typeFilter = isset($_GET['type']) ? strtolower(trim($_GET['type'])) : '';
+if ($typeFilter !== 'manhwa' && $typeFilter !== 'manhua') {
+    $typeFilter = '';
+}
 
 // English genres list for filter pills
 $genres = [
@@ -36,10 +40,11 @@ $page = max(1, intval($_GET['page'] ?? 1));
 $limit = 30;
 
 // Helper to preserve filter query parameters across page numbers
-function getPageUrl($p, $search, $genreSlug) {
+function getPageUrl($p, $search, $genreSlug, $typeFilter = '') {
     $params = [];
     if (!empty($search)) $params['q'] = $search;
     if (!empty($genreSlug)) $params['genre'] = $genreSlug;
+    if (!empty($typeFilter)) $params['type'] = $typeFilter;
     if ($p > 1) $params['page'] = $p;
     $qs = http_build_query($params);
     return BASE_URL . 'index.php' . ($qs ? '?' . $qs : '');
@@ -48,11 +53,11 @@ function getPageUrl($p, $search, $genreSlug) {
 // Fetch items directly from real-time library with pagination
 $pagedResult = [];
 if (!empty($search)) {
-    $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, true);
+    $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, $typeFilter);
 } elseif (!empty($genreSlug)) {
-    $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page);
+    $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page, $typeFilter);
 } else {
-    $pagedResult = MangaDexAPI::getLatestLiveUpdatesPaged($limit, $page);
+    $pagedResult = MangaDexAPI::getLatestLiveUpdatesPaged($limit, $page, $typeFilter);
 }
 
 $displayItems = $pagedResult['items'] ?? [];
@@ -207,29 +212,53 @@ require_once __DIR__ . '/includes/header.php';
     </section>
 
     <!-- GENRE FILTER PILLS -->
-    <section id="genres" class="space-y-3">
-        <div class="flex items-center justify-between">
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre
-            </h2>
-            <?php if (!empty($genreSlug) || !empty($search)): ?>
-                <a href="<?= BASE_URL ?>" class="text-xs text-brand-400 hover:text-brand-300 font-semibold">
-                    <i class="fa-solid fa-rotate-left mr-1"></i> Clear Filter
+    <section id="genres" class="space-y-4">
+        <!-- Type Format Tabs (All, Manhwa, Manhua) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-dark-800">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-brand-500"></i> Format:
+                </span>
+                <div class="flex items-center gap-1.5">
+                    <a href="<?= getPageUrl(1, $search, $genreSlug, '') ?>" 
+                       class="px-3 py-1 rounded-lg text-xs font-bold transition-all <?= empty($typeFilter) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750' ?>">
+                        All Comics
+                    </a>
+                    <a href="<?= getPageUrl(1, $search, $genreSlug, 'manhwa') ?>" 
+                       class="px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $typeFilter === 'manhwa' ? 'bg-indigo-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750' ?>">
+                        <span>🇰🇷 Manhwa</span>
+                    </a>
+                    <a href="<?= getPageUrl(1, $search, $genreSlug, 'manhua') ?>" 
+                       class="px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $typeFilter === 'manhua' ? 'bg-emerald-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750' ?>">
+                        <span>🇨🇳 Manhua</span>
+                    </a>
+                </div>
+            </div>
+
+            <?php if (!empty($genreSlug) || !empty($search) || !empty($typeFilter)): ?>
+                <a href="<?= BASE_URL ?>" class="text-xs text-brand-400 hover:text-brand-300 font-semibold self-start sm:self-auto">
+                    <i class="fa-solid fa-rotate-left mr-1"></i> Clear Filters
                 </a>
             <?php endif; ?>
         </div>
 
-        <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            <a href="<?= BASE_URL ?>index.php" 
-               class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= empty($genreSlug) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
-                All
-            </a>
-            <?php foreach ($genres as $g): ?>
-                <a href="<?= BASE_URL ?>index.php?genre=<?= urlencode($g['slug']) ?>" 
-                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= $genreSlug === $g['slug'] ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
-                    <?= htmlspecialchars($g['name']) ?>
+        <!-- Genre Filter Pills -->
+        <div class="space-y-2">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre
+            </h2>
+            <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                <a href="<?= getPageUrl(1, $search, '', $typeFilter) ?>" 
+                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= empty($genreSlug) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
+                    All Genres
                 </a>
-            <?php endforeach; ?>
+                <?php foreach ($genres as $g): ?>
+                    <a href="<?= getPageUrl(1, $search, $g['slug'], $typeFilter) ?>" 
+                       class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= $genreSlug === $g['slug'] ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
+                        <?= htmlspecialchars($g['name']) ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
         </div>
     </section>
 
@@ -246,6 +275,8 @@ require_once __DIR__ . '/includes/header.php';
                         Search Results for: "<span class="text-brand-400"><?= htmlspecialchars($search) ?></span>"
                     <?php elseif (!empty($genreSlug)): ?>
                         Genre: <span class="text-brand-400"><?= htmlspecialchars(ucwords(str_replace('-', ' ', $genreSlug))) ?></span>
+                    <?php elseif (!empty($typeFilter)): ?>
+                        <?= ucfirst($typeFilter) ?> Catalog
                     <?php else: ?>
                         Latest Releases &amp; Updates
                     <?php endif; ?>
@@ -295,6 +326,12 @@ require_once __DIR__ . '/includes/header.php';
                                 </span>
                             </div>
 
+                            <div class="absolute top-2 right-2 flex flex-col gap-1">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider <?= ($m['type'] ?? 'Manhwa') === 'Manhua' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-indigo-600 text-white shadow-sm' ?> backdrop-blur-md border border-white/10">
+                                    <?= htmlspecialchars($m['type'] ?? 'Manhwa') ?>
+                                </span>
+                            </div>
+
                             <div class="absolute bottom-2 right-2">
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-dark-900/90 backdrop-blur-md text-slate-200 border border-dark-700">
                                     <?= htmlspecialchars($status) ?>
@@ -340,7 +377,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="flex items-center gap-1.5 flex-wrap justify-center">
                         <!-- Prev Page Button -->
                         <?php if ($page > 1): ?>
-                            <a href="<?= getPageUrl($page - 1, $search, $genreSlug) ?>" 
+                            <a href="<?= getPageUrl($page - 1, $search, $genreSlug, $typeFilter) ?>" 
                                class="px-3 py-1.5 rounded-lg bg-dark-850 hover:bg-brand-600 border border-dark-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
                                 <i class="fa-solid fa-chevron-left text-[10px]"></i> Prev
                             </a>
@@ -357,7 +394,7 @@ require_once __DIR__ . '/includes/header.php';
                         ?>
 
                         <?php if ($startPage > 1): ?>
-                            <a href="<?= getPageUrl(1, $search, $genreSlug) ?>" 
+                            <a href="<?= getPageUrl(1, $search, $genreSlug, $typeFilter) ?>" 
                                class="w-8 h-8 rounded-lg bg-dark-850 hover:bg-dark-700 border border-dark-700 text-slate-300 hover:text-white text-xs font-bold transition-colors flex items-center justify-center">
                                 1
                             </a>
@@ -372,7 +409,7 @@ require_once __DIR__ . '/includes/header.php';
                                     <?= $p ?>
                                 </span>
                             <?php else: ?>
-                                <a href="<?= getPageUrl($p, $search, $genreSlug) ?>" 
+                                <a href="<?= getPageUrl($p, $search, $genreSlug, $typeFilter) ?>" 
                                    class="w-8 h-8 rounded-lg bg-dark-850 hover:bg-dark-700 border border-dark-700 text-slate-300 hover:text-white text-xs font-bold transition-colors flex items-center justify-center">
                                     <?= $p ?>
                                 </a>
@@ -383,7 +420,7 @@ require_once __DIR__ . '/includes/header.php';
                             <?php if ($endPage < $totalPages - 1): ?>
                                 <span class="px-1 text-slate-600 text-xs">&hellip;</span>
                             <?php endif; ?>
-                            <a href="<?= getPageUrl($totalPages, $search, $genreSlug) ?>" 
+                            <a href="<?= getPageUrl($totalPages, $search, $genreSlug, $typeFilter) ?>" 
                                class="w-8 h-8 rounded-lg bg-dark-850 hover:bg-dark-700 border border-dark-700 text-slate-300 hover:text-white text-xs font-bold transition-colors flex items-center justify-center">
                                 <?= $totalPages ?>
                             </a>
@@ -391,7 +428,7 @@ require_once __DIR__ . '/includes/header.php';
 
                         <!-- Next Page Button -->
                         <?php if ($page < $totalPages): ?>
-                            <a href="<?= getPageUrl($page + 1, $search, $genreSlug) ?>" 
+                            <a href="<?= getPageUrl($page + 1, $search, $genreSlug, $typeFilter) ?>" 
                                class="px-3 py-1.5 rounded-lg bg-dark-850 hover:bg-brand-600 border border-dark-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
                                 Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
                             </a>

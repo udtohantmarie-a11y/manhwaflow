@@ -31,7 +31,7 @@ if ($isLive) {
         'author' => $liveManga['author'],
         'artist' => $liveManga['author'],
         'status' => $liveManga['status'],
-        'type' => 'Webtoon',
+        'type' => $liveManga['type'] ?? 'Manhwa',
         'rating' => $liveManga['rating'] ?? 4.8,
         'views' => $liveManga['views'] ?? rand(18000, 95000),
         'synopsis' => $liveManga['description'],

@@ -81,7 +81,7 @@ class MangaDexAPI {
             }
         }
         if (empty($title)) {
-            $title = $attr['title']['ko-ro'] ?? reset($attr['title']) ?? 'Untitled';
+            $title = $attr['title']['ko-ro'] ?? $attr['title']['zh-ro'] ?? reset($attr['title']) ?? 'Untitled';
         }
 
         // Alt Title
@@ -91,8 +91,17 @@ class MangaDexAPI {
                 if (isset($alt['ko'])) {
                     $altTitle = $alt['ko'];
                     break;
+                } elseif (isset($alt['zh'])) {
+                    $altTitle = $alt['zh'];
+                    break;
+                } elseif (isset($alt['zh-hk'])) {
+                    $altTitle = $alt['zh-hk'];
+                    break;
                 } elseif (isset($alt['ko-ro']) && $alt['ko-ro'] !== $title) {
                     $altTitle = $alt['ko-ro'];
+                    break;
+                } elseif (isset($alt['zh-ro']) && $alt['zh-ro'] !== $title) {
+                    $altTitle = $alt['zh-ro'];
                     break;
                 } elseif (isset($alt['en']) && $alt['en'] !== $title) {
                     $altTitle = $alt['en'];
@@ -143,12 +152,17 @@ class MangaDexAPI {
         $rating = number_format(4.4 + (($ratingSeed % 6) * 0.1), 1);
         $views = 18000 + ($ratingSeed % 78000);
 
+        $origLang = $attr['originalLanguage'] ?? 'ko';
+        $type = ($origLang === 'zh' || $origLang === 'zh-hk') ? 'Manhua' : (($origLang === 'ja') ? 'Manga' : 'Manhwa');
+
         return [
             'id' => $mangaId,
             'title' => $title,
             'alt_title' => $altTitle,
             'author' => $authorName,
             'status' => ucfirst($attr['status'] ?? 'ongoing'),
+            'type' => $type,
+            'original_language' => $origLang,
             'year' => $attr['year'] ?? date('Y'),
             'rating' => $rating,
             'views' => $views,
@@ -161,13 +175,26 @@ class MangaDexAPI {
     }
 
     /**
-     * Get Real-time Latest Uploaded Series with English Translations (Paged) - Strictly Korean Manhwa
+     * Resolve original language list based on type filter (Manhwa, Manhua, or Both)
      */
-    public static function getLatestLiveUpdatesPaged($limit = 30, $page = 1) {
+    public static function resolveOriginalLanguages($typeFilter = null) {
+        $tf = strtolower(trim($typeFilter ?? ''));
+        if ($tf === 'manhwa') {
+            return ['ko'];
+        } elseif ($tf === 'manhua') {
+            return ['zh', 'zh-hk'];
+        }
+        return ['ko', 'zh', 'zh-hk']; // Both Korean Manhwa and Chinese Manhua (excludes Japanese Manga)
+    }
+
+    /**
+     * Get Real-time Latest Uploaded Series with English Translations (Paged) - Manhwa & Manhua
+     */
+    public static function getLatestLiveUpdatesPaged($limit = 30, $page = 1, $typeFilter = null) {
         $offset = max(0, ($page - 1) * $limit);
         $params = [
             'availableTranslatedLanguage' => ['en'],
-            'originalLanguage' => ['ko'],
+            'originalLanguage' => self::resolveOriginalLanguages($typeFilter),
             'order' => ['latestUploadedChapter' => 'desc'],
             'limit' => $limit,
             'offset' => $offset,
@@ -195,18 +222,18 @@ class MangaDexAPI {
         ];
     }
 
-    public static function getLatestLiveUpdates($limit = 30, $page = 1) {
-        $res = self::getLatestLiveUpdatesPaged($limit, $page);
+    public static function getLatestLiveUpdates($limit = 30, $page = 1, $typeFilter = null) {
+        $res = self::getLatestLiveUpdatesPaged($limit, $page, $typeFilter);
         return $res['items'];
     }
 
     /**
-     * Get Popular Series on MangaDex Live with English Translations - Strictly Korean Manhwa
+     * Get Popular Series on MangaDex Live with English Translations - Manhwa & Manhua
      */
-    public static function getPopularLive($limit = 12) {
+    public static function getPopularLive($limit = 12, $typeFilter = null) {
         $params = [
             'availableTranslatedLanguage' => ['en'],
-            'originalLanguage' => ['ko'],
+            'originalLanguage' => self::resolveOriginalLanguages($typeFilter),
             'order' => ['followedCount' => 'desc'],
             'limit' => $limit,
             'includes' => ['cover_art', 'author'],
@@ -261,16 +288,16 @@ class MangaDexAPI {
     ];
 
     /**
-     * Get Series Filtered by Genre / Tag (Paged across full MangaDex library) - Strictly Korean Manhwa
+     * Get Series Filtered by Genre / Tag (Paged across full MangaDex library) - Manhwa & Manhua
      */
-    public static function getByGenrePaged($genreSlug, $limit = 30, $page = 1) {
+    public static function getByGenrePaged($genreSlug, $limit = 30, $page = 1, $typeFilter = null) {
         $slugClean = strtolower(trim($genreSlug));
         $tagId = self::$tagMap[$slugClean] ?? null;
         $offset = max(0, ($page - 1) * $limit);
 
         $params = [
             'availableTranslatedLanguage' => ['en'],
-            'originalLanguage' => ['ko'],
+            'originalLanguage' => self::resolveOriginalLanguages($typeFilter),
             'limit' => $limit,
             'offset' => $offset,
             'includes' => ['cover_art', 'author'],
@@ -281,7 +308,7 @@ class MangaDexAPI {
         if ($tagId) {
             $params['includedTags'] = [$tagId];
         } else {
-            return self::searchPaged(str_replace('-', ' ', $genreSlug), $limit, $page, true);
+            return self::searchPaged(str_replace('-', ' ', $genreSlug), $limit, $page, $typeFilter);
         }
 
         $res = self::request('/manga', $params, 600); // 10-minute cache per genre page
@@ -304,20 +331,20 @@ class MangaDexAPI {
         ];
     }
 
-    public static function getByGenre($genreSlug, $limit = 30, $page = 1) {
-        $res = self::getByGenrePaged($genreSlug, $limit, $page);
+    public static function getByGenre($genreSlug, $limit = 30, $page = 1, $typeFilter = null) {
+        $res = self::getByGenrePaged($genreSlug, $limit, $page, $typeFilter);
         return $res['items'];
     }
 
     /**
-     * Live Search MangaDex with English Translations (Paged) - Strictly Korean Manhwa
+     * Live Search MangaDex with English Translations (Paged) - Manhwa & Manhua
      */
-    public static function searchPaged($query, $limit = 30, $page = 1, $onlyKorean = true) {
+    public static function searchPaged($query, $limit = 30, $page = 1, $typeFilter = null) {
         $offset = max(0, ($page - 1) * $limit);
         $params = [
             'title' => $query,
             'availableTranslatedLanguage' => ['en'],
-            'originalLanguage' => ['ko'],
+            'originalLanguage' => self::resolveOriginalLanguages($typeFilter),
             'limit' => $limit,
             'offset' => $offset,
             'includes' => ['cover_art', 'author'],
@@ -345,8 +372,8 @@ class MangaDexAPI {
         ];
     }
 
-    public static function search($query, $limit = 30, $page = 1, $onlyKorean = true) {
-        $res = self::searchPaged($query, $limit, $page, $onlyKorean);
+    public static function search($query, $limit = 30, $page = 1, $typeFilter = null) {
+        $res = self::searchPaged($query, $limit, $page, $typeFilter);
         return $res['items'];
     }
 
@@ -453,11 +480,10 @@ class MangaDexAPI {
         }
 
         // When to check secondary provider:
-        // 1. MangaDex has 0 hosted chapters
-        // 2. MangaDex hosted count is very low (< 15)
-        // 3. MangaDex has missing gaps: highest chapter is >= 25, but hosted count is less than 60% of that number!
-        $hasMissingGap = ($maxChapterNum >= 25 && $hostedCount < ($maxChapterNum * 0.6));
-        if ($hostedCount < 15 || $hasMissingGap) {
+        // 1. MangaDex has 0 hosted chapters (DMCA removed or only external links)
+        // 2. MangaDex has severe missing gaps in long-running series (e.g. max chapter >= 30 but missing > 60% of chapters)
+        $hasMissingGap = ($maxChapterNum >= 30 && $hostedCount < ($maxChapterNum * 0.4));
+        if ($hostedCount === 0 || $hasMissingGap) {
             $fallbackList = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle);
             if (!empty($fallbackList) && count($fallbackList) > $hostedCount) {
                 return $fallbackList;

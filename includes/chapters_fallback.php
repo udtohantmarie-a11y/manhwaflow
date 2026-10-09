@@ -50,6 +50,47 @@ class ChaptersFallback {
     }
 
     /**
+     * Delete a dynamic mapping from cache
+     */
+    public static function deleteMapping($mangaId) {
+        $mapFile = self::CACHE_DIR . '/series_mappings.json';
+        if (file_exists($mapFile)) {
+            $mappings = json_decode(@file_get_contents($mapFile), true) ?: [];
+            if (isset($mappings[$mangaId])) {
+                unset($mappings[$mangaId]);
+                @file_put_contents($mapFile, json_encode($mappings, JSON_PRETTY_PRINT));
+            }
+        }
+    }
+
+    /**
+     * Strict Title Matcher - Checks if candidate series title matches target title
+     */
+    public static function isTitleMatch($title1, $title2) {
+        if (empty($title1) || empty($title2)) return false;
+
+        // Strip hash suffixes (e.g. Asura -bd5bdaf8) and extra whitespace
+        $clean1 = preg_replace('/-[a-f0-9]{8}$/i', '', $title1);
+        $clean2 = preg_replace('/-[a-f0-9]{8}$/i', '', $title2);
+
+        $norm1 = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $clean1)));
+        $norm2 = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $clean2)));
+
+        if (empty($norm1) || empty($norm2)) return false;
+        if ($norm1 === $norm2) return true;
+
+        // Containment check with high length ratio
+        if (str_contains($norm1, $norm2) || str_contains($norm2, $norm1)) {
+            $minLen = min(strlen($norm1), strlen($norm2));
+            $maxLen = max(strlen($norm1), strlen($norm2));
+            if ($minLen / $maxLen >= 0.75) return true;
+        }
+
+        similar_text($norm1, $norm2, $pct);
+        return $pct >= 75;
+    }
+
+    /**
      * Save dynamic mapping to cache file
      */
     public static function saveMapping($mangaId, $type, $targetId) {
@@ -76,19 +117,31 @@ class ChaptersFallback {
         // 1. Check existing pre-map or cached dynamic mapping
         $mapping = self::getMapping($mangaId);
         if ($mapping) {
-            if ($mapping['type'] === 'wc') {
-                return self::getWeebCentralChapters($mapping['id'], $limit);
-            } elseif ($mapping['type'] === 'asura') {
-                return self::getAsuraChapters($mapping['id'], $limit);
+            // Defensive Check: If dynamic mapping, ensure it does not contradict $mangaTitle
+            if (!empty($mangaTitle) && !isset(self::$weebCentralMap[$mangaId]) && !isset(self::$asuraMap[$mangaId])) {
+                if ($mapping['type'] === 'asura' && !self::isTitleMatch($mangaTitle, $mapping['id'])) {
+                    self::deleteMapping($mangaId);
+                    $mapping = null;
+                }
+            }
+
+            if ($mapping) {
+                if ($mapping['type'] === 'wc') {
+                    $chList = self::getWeebCentralChapters($mapping['id'], $limit);
+                    if (!empty($chList)) return $chList;
+                } elseif ($mapping['type'] === 'asura') {
+                    $chList = self::getAsuraChapters($mapping['id'], $limit);
+                    if (!empty($chList)) return $chList;
+                }
             }
         }
 
-        // 2. Dynamic search by title if title is provided
+        // 2. Strict dynamic search by title if title is provided
         if (!empty($mangaTitle)) {
             // A. Search WeebCentral
             $wcId = self::searchWeebCentralId($mangaTitle);
             if (!$wcId) {
-                // Try clean title without parenthesis, subtitle or punctuation
+                // Try clean title without parenthesis or punctuation
                 $cleanTitle = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $mangaTitle));
                 $cleanTitle = trim(explode(':', $cleanTitle)[0]);
                 $cleanTitle = trim(explode('-', $cleanTitle)[0]);
@@ -260,7 +313,8 @@ class ChaptersFallback {
      * Search WeebCentral dynamically for matching series ID
      */
     public static function searchWeebCentralId($title) {
-        $q = urlencode($title);
+        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
+        $q = urlencode($clean);
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, self::WC_BASE . "/search/data?text={$q}");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -271,8 +325,16 @@ class ChaptersFallback {
         $html = curl_exec($ch);
         curl_close($ch);
 
-        if (preg_match('/href="https:\/\/weebcentral\.com\/series\/([A-Z0-9]+)\/([^"]+)"[^>]*class="[^"]*link-hover">([^<]+)<\/a>/i', $html, $m)) {
-            return $m[1];
+        if (!$html) return null;
+
+        if (preg_match_all('/href="https:\/\/weebcentral\.com\/series\/([A-Z0-9]+)\/([^"]+)"[^>]*class="[^"]*link-hover">([^<]+)<\/a>/i', $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $candidateId = $m[1];
+                $candidateTitle = html_entity_decode(trim($m[3]), ENT_QUOTES | ENT_HTML5);
+                if (self::isTitleMatch($clean, $candidateTitle) || self::isTitleMatch($title, $candidateTitle)) {
+                    return $candidateId;
+                }
+            }
         }
         return null;
     }
@@ -281,8 +343,9 @@ class ChaptersFallback {
      * Search Asura Scans dynamically for matching series slug
      */
     public static function searchAsuraSlug($title) {
-        $clean = trim(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $title));
-        $q = urlencode($clean);
+        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
+        $cleanAlnum = trim(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $clean));
+        $q = urlencode($cleanAlnum);
         $ch = curl_init(self::ASURA_BASE . '/comics?name=' . $q);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -292,19 +355,17 @@ class ChaptersFallback {
         $html = curl_exec($ch);
         curl_close($ch);
 
+        if (!$html) return null;
+
         if (preg_match_all('/href="\/comics\/([a-z0-9-]+)"[^>]*>/i', $html, $m)) {
             $slugs = array_values(array_unique($m[1]));
-            $words = array_filter(explode(' ', strtolower(preg_replace('/[^a-z0-9]+/', ' ', $title))), fn($w) => strlen($w) > 2);
             foreach ($slugs as $s) {
-                $matched = 0;
-                foreach ($words as $w) {
-                    if (str_contains($s, $w)) $matched++;
-                }
-                if ($matched >= min(2, count($words))) {
+                $cleanSlug = preg_replace('/-[a-f0-9]{8}$/', '', $s);
+                $cleanSlugTitle = str_replace('-', ' ', $cleanSlug);
+                if (self::isTitleMatch($clean, $cleanSlugTitle) || self::isTitleMatch($title, $cleanSlugTitle)) {
                     return $s;
                 }
             }
-            if (!empty($slugs)) return $slugs[0];
         }
         return null;
     }
