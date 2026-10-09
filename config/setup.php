@@ -183,7 +183,7 @@ function initializeDatabase($pdo) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
-    // Ensure default payout columns exist in user_rewards
+    // Ensure default payout & ad watch columns exist in user_rewards
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM `user_rewards` LIKE 'default_account_number'")->fetchAll();
         if (empty($cols)) {
@@ -191,6 +191,56 @@ function initializeDatabase($pdo) {
                 ADD COLUMN `default_payout_method` VARCHAR(50) DEFAULT 'gcash',
                 ADD COLUMN `default_account_name` VARCHAR(100) NULL,
                 ADD COLUMN `default_account_number` VARCHAR(100) NULL");
+        }
+    } catch(Exception $e) {}
+
+    try {
+        $adCols = $pdo->query("SHOW COLUMNS FROM `user_rewards` LIKE 'ads_watched_today'")->fetchAll();
+        if (empty($adCols)) {
+            $pdo->exec("ALTER TABLE `user_rewards` 
+                ADD COLUMN `ads_watched_today` INT DEFAULT 0,
+                ADD COLUMN `last_ad_date` DATE NULL");
+        }
+    } catch(Exception $e) {}
+
+    // Ensure redeem_codes and user_redeemed_codes tables exist
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `redeem_codes` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `code` VARCHAR(50) NOT NULL UNIQUE,
+                `coins` INT NOT NULL DEFAULT 100,
+                `description` VARCHAR(255) NULL,
+                `max_uses` INT DEFAULT 0,
+                `used_count` INT DEFAULT 0,
+                `is_active` TINYINT(1) DEFAULT 1,
+                `expires_at` DATETIME NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+            CREATE TABLE IF NOT EXISTS `user_redeemed_codes` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `code_id` INT NOT NULL,
+                `coins_awarded` INT NOT NULL,
+                `redeemed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uniq_user_code` (`user_id`, `code_id`),
+                FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY (`code_id`) REFERENCES `redeem_codes`(`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $checkCodes = $pdo->query("SELECT COUNT(*) FROM `redeem_codes`")->fetchColumn();
+        if ($checkCodes == 0) {
+            $sampleCodes = [
+                ['FLOW2026', 150, 'Monthly Welcome Code 2026'],
+                ['MANHWAFACEBOOK', 200, 'Exclusive Facebook Page Community Code'],
+                ['WELCOME100', 100, 'New Reader Starter Gift']
+            ];
+            $codeStmt = $pdo->prepare("INSERT INTO `redeem_codes` (`code`, `coins`, `description`) VALUES (?, ?, ?)");
+            foreach ($sampleCodes as $sc) {
+                $codeStmt->execute($sc);
+            }
         }
     } catch(Exception $e) {}
 

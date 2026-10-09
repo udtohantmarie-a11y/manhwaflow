@@ -20,23 +20,90 @@ function initMobileMenu() {
     }
 }
 
-// 2. Account-Based Bookmark Manager
+// ======================================================================
+// 2. Hybrid Bookmark Manager (Guest LocalStorage + Account Cloud Sync)
+// ======================================================================
+const GUEST_BM_KEY = 'mf_bookmarks';
+
+function getLocalBookmarks() {
+    try {
+        const raw = localStorage.getItem(GUEST_BM_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveLocalBookmarks(list) {
+    try {
+        localStorage.setItem(GUEST_BM_KEY, JSON.stringify(list));
+    } catch (e) {}
+}
+
+function isLocalBookmarked(seriesId) {
+    if (!seriesId) return false;
+    const list = getLocalBookmarks();
+    return list.some(item => String(item.id || item.series_id) === String(seriesId));
+}
+
+function toggleLocalBookmark(item) {
+    const list = getLocalBookmarks();
+    const id = String(item.id || item.series_id);
+    const idx = list.findIndex(b => String(b.id || b.series_id) === id);
+    let bookmarked = false;
+    if (idx >= 0) {
+        list.splice(idx, 1);
+        bookmarked = false;
+    } else {
+        list.unshift({
+            id: id,
+            series_id: id,
+            title: item.title || 'Unknown Series',
+            slug: item.slug || '',
+            cover_image: item.cover_image || item.cover || '',
+            rating: item.rating || 4.8,
+            status: item.status || 'Ongoing',
+            saved_at: Date.now()
+        });
+        bookmarked = true;
+    }
+    saveLocalBookmarks(list);
+    return { bookmarked, count: list.length };
+}
+
+async function autoSyncGuestBookmarks() {
+    const list = getLocalBookmarks();
+    if (!list || list.length === 0) return;
+    try {
+        const res = await fetch(APP_BASE + 'api/bookmark.php?action=sync_guest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(list)
+        });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.removeItem(GUEST_BM_KEY);
+        }
+    } catch (e) {}
+}
+
 function initBookmarkSystem() {
     const btn = document.getElementById('btn-toggle-bookmark');
     const badge = document.getElementById('bookmark-badge');
+    const mobileBadge = document.getElementById('mobile-bookmark-badge');
 
-    // Helper to update badge
     const updateBadgeCount = (count) => {
-        if (!badge) return;
-        if (count > 0) {
-            badge.textContent = count;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
+        [badge, mobileBadge].forEach(b => {
+            if (!b) return;
+            if (count > 0) {
+                b.textContent = count;
+                b.classList.remove('hidden');
+            } else {
+                b.classList.add('hidden');
+            }
+        });
     };
 
-    // Helper to style button
     const setBtnUi = (isBookmarked) => {
         if (!btn) return;
         if (isBookmarked) {
@@ -50,23 +117,40 @@ function initBookmarkSystem() {
         }
     };
 
-    // Check status if on manhwa details page
     if (btn) {
         const mId = btn.dataset.id;
+        
+        // Immediate local UI update
+        if (isLocalBookmarked(mId)) {
+            setBtnUi(true);
+        }
+        updateBadgeCount(getLocalBookmarks().length);
+
+        // Verify status with server
         fetch(APP_BASE + 'api/bookmark.php?action=status&series_id=' + encodeURIComponent(mId))
             .then(res => res.json())
             .then(data => {
-                setBtnUi(data.bookmarked);
                 if (data.logged_in) {
+                    setBtnUi(data.bookmarked);
                     updateBadgeCount(data.count);
+                    autoSyncGuestBookmarks();
+                } else {
+                    const localStatus = isLocalBookmarked(mId);
+                    setBtnUi(localStatus);
+                    updateBadgeCount(getLocalBookmarks().length);
                 }
             })
-            .catch(() => {});
+            .catch(() => {
+                setBtnUi(isLocalBookmarked(mId));
+                updateBadgeCount(getLocalBookmarks().length);
+            });
 
         btn.addEventListener('click', async () => {
             const payload = {
+                id: btn.dataset.id,
                 series_id: btn.dataset.id,
                 title: btn.dataset.title,
+                slug: btn.dataset.slug,
                 cover_image: btn.dataset.cover,
                 rating: btn.dataset.rating,
                 status: btn.dataset.status
@@ -82,9 +166,13 @@ function initBookmarkSystem() {
                 const data = await res.json();
 
                 if (data.auth_required) {
-                    showAuthRequiredModal(
-                        'Sign In Required',
-                        'Bookmarking is exclusive to registered members. Sign in or create a free account to bookmark this series and get live release alerts!'
+                    // Guest user: save locally seamlessly!
+                    const localRes = toggleLocalBookmark(payload);
+                    setBtnUi(localRes.bookmarked);
+                    updateBadgeCount(localRes.count);
+                    showToast(
+                        localRes.bookmarked ? 'Saved to Bookmarks (Saved on this device)' : 'Removed from Bookmarks',
+                        localRes.bookmarked ? 'fa-bookmark text-brand-400' : 'fa-check text-slate-400'
                     );
                     return;
                 }
@@ -92,10 +180,20 @@ function initBookmarkSystem() {
                 if (data.success) {
                     setBtnUi(data.bookmarked);
                     updateBadgeCount(data.count);
-                    showToast(data.bookmarked ? 'Added to your Library' : 'Removed from Library', data.bookmarked ? 'fa-bookmark text-brand-400' : 'fa-check text-slate-400');
+                    showToast(
+                        data.bookmarked ? 'Added to your Library' : 'Removed from Library', 
+                        data.bookmarked ? 'fa-bookmark text-brand-400' : 'fa-check text-slate-400'
+                    );
                 }
             } catch (err) {
-                alert('Could not update bookmark.');
+                // Network or host fallback -> safely save to localStorage
+                const localRes = toggleLocalBookmark(payload);
+                setBtnUi(localRes.bookmarked);
+                updateBadgeCount(localRes.count);
+                showToast(
+                    localRes.bookmarked ? 'Saved to Bookmarks' : 'Removed from Bookmarks',
+                    localRes.bookmarked ? 'fa-bookmark text-brand-400' : 'fa-check text-slate-400'
+                );
             } finally {
                 btn.disabled = false;
             }
@@ -105,9 +203,16 @@ function initBookmarkSystem() {
         fetch(APP_BASE + 'api/bookmark.php?action=status')
             .then(res => res.json())
             .then(data => {
-                if (data.logged_in) updateBadgeCount(data.count);
+                if (data.logged_in) {
+                    updateBadgeCount(data.count);
+                    autoSyncGuestBookmarks();
+                } else {
+                    updateBadgeCount(getLocalBookmarks().length);
+                }
             })
-            .catch(() => {});
+            .catch(() => {
+                updateBadgeCount(getLocalBookmarks().length);
+            });
     }
 }
 

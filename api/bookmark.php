@@ -97,6 +97,45 @@ if ($action === 'toggle') {
     exit;
 }
 
+// 4. Sync Guest Bookmarks (When logging in / registering)
+if ($action === 'sync_guest') {
+    if (!$isLoggedIn) {
+        echo json_encode(['success' => false, 'message' => 'Please sign in to sync bookmarks.']);
+        exit;
+    }
+
+    $raw = file_get_contents('php://input');
+    $items = json_decode($raw, true) ?? [];
+    if (is_array($items) && !empty($items)) {
+        foreach ($items as $item) {
+            $seriesId = trim($item['id'] ?? ($item['series_id'] ?? ''));
+            $title = trim($item['title'] ?? '');
+            $cover = trim($item['cover_image'] ?? ($item['cover'] ?? ''));
+            $status = trim($item['status'] ?? 'Ongoing');
+            $rating = floatval($item['rating'] ?? 4.8);
+
+            if (!empty($seriesId) && !empty($title)) {
+                $check = $pdo->prepare("SELECT id FROM user_bookmarks WHERE user_id = ? AND series_id = ?");
+                $check->execute([$userId, $seriesId]);
+                if (!$check->fetch()) {
+                    $ins = $pdo->prepare("
+                        INSERT INTO user_bookmarks (user_id, series_id, title, cover_image, status, rating)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ");
+                    $ins->execute([$userId, $seriesId, $title, $cover, $status, $rating]);
+                }
+            }
+        }
+    }
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM user_bookmarks WHERE user_id = ?");
+    $countStmt->execute([$userId]);
+    $count = intval($countStmt->fetchColumn());
+
+    echo json_encode(['success' => true, 'count' => $count]);
+    exit;
+}
+
 echo json_encode(['success' => false, 'message' => 'Invalid action.']);
 exit;
 

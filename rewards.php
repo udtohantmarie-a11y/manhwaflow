@@ -35,6 +35,9 @@ if ($userId) {
 $today = date('Y-m-d');
 $canCheckin = $userRewards ? ($userRewards['last_checkin_date'] !== $today) : false;
 $canSponsor = $userRewards ? ($userRewards['last_sponsor_date'] !== $today) : true;
+$lastAdDate = $userRewards['last_ad_date'] ?? null;
+$adsWatchedToday = ($userRewards && $lastAdDate === $today) ? intval($userRewards['ads_watched_today'] ?? 0) : 0;
+$canWatchAd = ($adsWatchedToday < 5);
 $coins = $userRewards ? intval($userRewards['coins']) : 0;
 $streak = $userRewards ? intval($userRewards['streak_days']) : 0;
 $chaptersRead = $userRewards ? intval($userRewards['chapters_read_count']) : 0;
@@ -184,9 +187,59 @@ $rankData = calcRank($totalEarned);
             <p class="text-xs text-slate-400">Complete tasks daily to earn extra Flow Coins!</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            <!-- Quest 1: Daily Sponsor Exploration -->
+            <!-- Quest 1: Watch Ads Quest (0/5) -->
+            <div class="bg-dark-900 border border-amber-500/40 rounded-2xl p-5 space-y-4 relative overflow-hidden shadow-xl group">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+                <div class="flex items-start justify-between gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0">
+                        <i class="fa-solid fa-play"></i>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-black border border-amber-500/30">
+                        +20-50 Coins
+                    </span>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">Daily Ads Quest (0/5)</h3>
+                    <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Watch short partner ads (up to 5 times daily). Complete all 5 for an extra finish bonus!
+                    </p>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center text-[11px]">
+                        <span class="text-slate-400">Progress:</span>
+                        <span class="font-extrabold text-amber-400"><?= $adsWatchedToday ?> / 5 Completed</span>
+                    </div>
+                    <div class="h-2 w-full bg-dark-800 rounded-full overflow-hidden border border-dark-750">
+                        <div class="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500" style="width: <?= min(100, ($adsWatchedToday / 5) * 100) ?>%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <?php if ($userId): ?>
+                        <?php if ($canWatchAd): ?>
+                            <button onclick="watchDailyAd()" id="btn-watch-ad"
+                                    class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-play text-[10px]"></i>
+                                <span>Watch Ad (<?= $adsWatchedToday ?>/5)</span>
+                            </button>
+                        <?php else: ?>
+                            <button disabled class="w-full py-2.5 px-4 rounded-xl bg-dark-850 text-slate-500 text-xs font-bold border border-dark-750 cursor-not-allowed">
+                                <i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> Completed (5/5 Today!)
+                            </button>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <a href="<?= BASE_URL ?>login.php?redirect=rewards.php" class="block text-center w-full py-2.5 rounded-xl bg-dark-800 text-slate-300 hover:text-white text-xs font-semibold">
+                            Sign In to Watch
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Quest 2: Daily Sponsor Exploration -->
             <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-5 space-y-4 relative overflow-hidden shadow-xl group">
                 <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-brand-500/10 rounded-full blur-xl pointer-events-none"></div>
                 <div class="flex items-start justify-between gap-3">
@@ -203,7 +256,7 @@ $rankData = calcRank($totalEarned);
                         Check out our partner games and services to support ManhwaFlow hosting and earn bonus coins.
                     </p>
                 </div>
-                <div>
+                <div class="pt-6">
                     <?php if ($userId): ?>
                         <?php if ($canSponsor): ?>
                             <button onclick="claimSponsorQuest()" id="btn-sponsor-quest"
@@ -224,7 +277,7 @@ $rankData = calcRank($totalEarned);
                 </div>
             </div>
 
-            <!-- Quest 2: Read Chapters -->
+            <!-- Quest 3: Read Chapters -->
             <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5 space-y-4 shadow-xl">
                 <div class="flex items-start justify-between gap-3">
                     <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl shrink-0">
@@ -240,14 +293,14 @@ $rankData = calcRank($totalEarned);
                         Automatically get +5 coins credited to your account every time you complete reading a chapter in the reader!
                     </p>
                 </div>
-                <div>
+                <div class="pt-6">
                     <a href="<?= BASE_URL ?>" class="block text-center w-full py-2.5 px-4 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-slate-200 text-xs font-bold transition-all">
                         <i class="fa-solid fa-compass mr-1"></i> Explore Comics Catalog
                     </a>
                 </div>
             </div>
 
-            <!-- Quest 3: Leave Chapter Comments -->
+            <!-- Quest 4: Leave Chapter Comments -->
             <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5 space-y-4 shadow-xl">
                 <div class="flex items-start justify-between gap-3">
                     <div class="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl shrink-0">
@@ -263,13 +316,102 @@ $rankData = calcRank($totalEarned);
                         Leave your thoughts, theories, and comments at the bottom of chapters to connect with other fans and level up!
                     </p>
                 </div>
-                <div>
+                <div class="pt-6">
                     <a href="<?= BASE_URL ?>history.php" class="block text-center w-full py-2.5 px-4 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-slate-200 text-xs font-bold transition-all">
                         <i class="fa-solid fa-clock-rotate-left mr-1"></i> Continue Your Series
                     </a>
                 </div>
             </div>
 
+        </div>
+    </section>
+
+    <!-- MONTHLY REDEEM CODES & FACEBOOK COMMUNITY -->
+    <section class="bg-gradient-to-r from-brand-950/80 via-dark-900 to-indigo-950/80 border border-brand-500/30 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden">
+        <div class="absolute -right-10 -bottom-10 w-60 h-60 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-dark-800">
+            <div>
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
+                    <i class="fa-solid fa-ticket"></i> Monthly Bonus Codes
+                </div>
+                <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                    Redeem Monthly Codes &amp; Points
+                </h2>
+                <p class="text-xs text-slate-300 max-w-xl mt-1">
+                    Enter official secret codes released every month to receive instant bonus Flow Coins!
+                </p>
+            </div>
+            
+            <!-- Facebook Action Button -->
+            <a href="https://www.facebook.com" target="_blank" rel="noopener noreferrer"
+               class="px-5 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs sm:text-sm shadow-lg shadow-blue-900/40 transition-all flex items-center gap-2 self-start md:self-auto shrink-0">
+                <i class="fa-brands fa-facebook text-base"></i>
+                <span>Visit Facebook Page &amp; Follow</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-80"></i>
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <!-- Left Info Box: Why Facebook? -->
+            <div class="lg:col-span-7 bg-dark-900/80 border border-dark-750 rounded-2xl p-5 sm:p-6 space-y-3">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-400 flex items-center justify-center text-2xl shrink-0">
+                        <i class="fa-brands fa-facebook-f"></i>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="text-sm font-bold text-white">Saan makikita ang mga Redeem Code?</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Hindi po direktang inilalagay ang mga code dito sa loob ng website! Ipinapaskil po ang mga <strong>official monthly redeem codes</strong> sa ating opisyal na <strong>Facebook Page</strong> buwan-buwan. I-follow at i-like ang aming page para lagi kang updated sa bagong codes!
+                        </p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 text-[11px] text-slate-300">
+                    <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
+                        <i class="fa-solid fa-bell text-amber-400"></i>
+                        <span>1. I-Follow ang Facebook Page</span>
+                    </div>
+                    <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-emerald-400"></i>
+                        <span>2. Kunin ang monthly promo code</span>
+                    </div>
+                    <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
+                        <i class="fa-solid fa-gift text-brand-400"></i>
+                        <span>3. I-paste dito para sa coins!</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Input Box: Redeem Form -->
+            <div class="lg:col-span-5 bg-dark-900/90 border border-brand-500/40 rounded-2xl p-5 sm:p-6 space-y-3.5 shadow-xl">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-key text-amber-400"></i> Enter Redeem Code
+                    </h3>
+                    <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">+100 - 500 Coins</span>
+                </div>
+                
+                <?php if ($userId): ?>
+                    <form onsubmit="submitRedeemCode(event)" class="space-y-3">
+                        <div class="relative">
+                            <input type="text" id="redeem-input-code" required placeholder="e.g. FLOW2026, MANHWAFACEBOOK"
+                                   class="w-full bg-dark-850 border border-dark-700 focus:border-brand-500 rounded-xl px-4 py-3 text-xs sm:text-sm text-white font-mono tracking-wider uppercase focus:outline-none placeholder:text-slate-600 placeholder:normal-case">
+                        </div>
+                        <button type="submit" id="btn-submit-code"
+                                class="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-brand-600/30 transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-gift"></i>
+                            <span>Redeem Bonus Coins</span>
+                        </button>
+                    </form>
+                <?php else: ?>
+                    <div class="text-center py-4 space-y-3">
+                        <p class="text-xs text-slate-400">Kailangang naka-login upang ma-claim ang free redeem points sa iyong account.</p>
+                        <a href="<?= BASE_URL ?>login.php?redirect=rewards.php" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md">
+                            <i class="fa-solid fa-right-to-bracket text-xs"></i> Sign In to Redeem
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     </section>
 
@@ -555,6 +697,68 @@ $rankData = calcRank($totalEarned);
 </div>
 
 <script>
+// 1. Watch Daily Ad (0/5 Quests)
+async function watchDailyAd() {
+    const btn = document.getElementById('btn-watch-ad');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Loading Ad...';
+    }
+
+    try {
+        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=watch_ad', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            // Open sponsored ad link
+            if (data.sponsor_url) {
+                window.open(data.sponsor_url, '_blank');
+            }
+            alert(data.message);
+            window.location.reload();
+        } else {
+            alert(data.message);
+        }
+    } catch(e) {
+        alert('Could not record ad watch. Please check your connection and try again.');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+// 2. Submit Monthly Redeem Code
+async function submitRedeemCode(e) {
+    e.preventDefault();
+    const input = document.getElementById('redeem-input-code');
+    const btn = document.getElementById('btn-submit-code');
+    if (!input || !input.value.trim()) return;
+
+    const code = input.value.trim().toUpperCase();
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Checking Code...';
+    }
+
+    try {
+        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=redeem_code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+            window.location.reload();
+        }
+    } catch(err) {
+        alert('Could not process redeem code. Please try again.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-gift"></i> <span>Redeem Bonus Coins</span>';
+        }
+    }
+}
+
 // Check-In API call
 async function claimCheckin() {
     const btn = document.getElementById('btn-checkin');

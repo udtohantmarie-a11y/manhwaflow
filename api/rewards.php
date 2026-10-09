@@ -74,6 +74,10 @@ if ($action === 'get_status') {
     $canCheckin = ($rewards['last_checkin_date'] !== $today);
     $canSponsor = ($rewards['last_sponsor_date'] !== $today);
 
+    $lastAdDate = $rewards['last_ad_date'] ?? null;
+    $adsWatchedToday = ($lastAdDate === $today) ? intval($rewards['ads_watched_today'] ?? 0) : 0;
+    $canWatchAd = ($adsWatchedToday < 5);
+
     echo json_encode([
         'success' => true,
         'is_logged_in' => true,
@@ -83,6 +87,9 @@ if ($action === 'get_status') {
         'chapters_read' => intval($rewards['chapters_read_count']),
         'can_checkin_today' => $canCheckin,
         'can_sponsor_today' => $canSponsor,
+        'ads_watched_today' => $adsWatchedToday,
+        'can_watch_ad' => $canWatchAd,
+        'max_daily_ads' => 5,
         'rank' => getHunterRank($rewards['total_earned']),
         'default_payout_method' => $rewards['default_payout_method'] ?? 'gcash',
         'default_account_name' => $rewards['default_account_name'] ?? '',
@@ -228,7 +235,140 @@ if ($action === 'sponsor_quest') {
     exit;
 }
 
-// --- 5. REQUEST CASHOUT / PAYOUT ---
+// --- 5. DAILY ADS TASK (0/5) ---
+if ($action === 'watch_ad') {
+    $lastAdDate = $rewards['last_ad_date'] ?? null;
+    $currentCount = ($lastAdDate === $today) ? intval($rewards['ads_watched_today'] ?? 0) : 0;
+
+    if ($currentCount >= 5) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Daily ad watch task completed (5/5)! Resets at midnight tomorrow.'
+        ]);
+        exit;
+    }
+
+    $newCount = $currentCount + 1;
+    // 20 coins per ad, with +30 bonus on the 5th ad = 50 coins
+    $earnedCoins = ($newCount === 5) ? 50 : 20;
+
+    $stmt = $pdo->prepare("
+        UPDATE `user_rewards` 
+        SET `coins` = `coins` + ?, 
+            `total_earned` = `total_earned` + ?, 
+            `ads_watched_today` = ?,
+            `last_ad_date` = ? 
+        WHERE `user_id` = ?
+    ");
+    $stmt->execute([$earnedCoins, $earnedCoins, $newCount, $today, $userId]);
+
+    $logDesc = "Daily Ad Watch ({$newCount}/5)" . ($newCount === 5 ? " + Completion Bonus" : "");
+    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'ad_watch', ?, ?)");
+    $log->execute([$userId, $earnedCoins, $logDesc]);
+
+    $newRow = getUserRewardsRow($pdo, $userId);
+    echo json_encode([
+        'success' => true,
+        'earned_coins' => $earnedCoins,
+        'current_count' => $newCount,
+        'max_count' => 5,
+        'coins' => intval($newRow['coins']),
+        'sponsor_url' => 'https://uplcm.com/4/11983803',
+        'message' => ($newCount === 5) 
+            ? "🎉 Amazing! Completed 5/5 ads! +{$earnedCoins} Coins credited (includes completion bonus)!"
+            : "Watched ad {$newCount}/5! +{$earnedCoins} Flow Coins credited to your balance."
+    ]);
+    exit;
+}
+
+// --- 6. REDEEM MONTHLY PROMO CODE ---
+if ($action === 'redeem_code') {
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true) ?? $_POST;
+    $inputCode = strtoupper(trim($data['code'] ?? ($_GET['code'] ?? '')));
+
+    if (empty($inputCode)) {
+        echo json_encode(['success' => false, 'message' => 'Please enter a redeem code.']);
+        exit;
+    }
+
+    // Lookup code in database
+    $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
+    $cStmt->execute([$inputCode]);
+    $codeRow = $cStmt->fetch();
+
+    if (!$codeRow) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid or unknown redeem code. Visit and follow our official Facebook page for the latest monthly codes!'
+        ]);
+        exit;
+    }
+
+    // Check expiration
+    if (!empty($codeRow['expires_at']) && strtotime($codeRow['expires_at']) < time()) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'This redeem code has expired. Check our Facebook page for new monthly codes!'
+        ]);
+        exit;
+    }
+
+    // Check max uses limit
+    if (intval($codeRow['max_uses']) > 0 && intval($codeRow['used_count']) >= intval($codeRow['max_uses'])) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'This redeem code has reached its maximum claim limit.'
+        ]);
+        exit;
+    }
+
+    // Check if user already claimed this code
+    $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
+    $checkUsed->execute([$userId, $codeRow['id']]);
+    if ($checkUsed->fetch()) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'You have already redeemed this code! Each account can only claim each monthly code once.'
+        ]);
+        exit;
+    }
+
+    $rewardCoins = intval($codeRow['coins']);
+
+    // Process redemption in transaction
+    $pdo->beginTransaction();
+    try {
+        $insRedeem = $pdo->prepare("INSERT INTO `user_redeemed_codes` (`user_id`, `code_id`, `coins_awarded`) VALUES (?, ?, ?)");
+        $insRedeem->execute([$userId, $codeRow['id'], $rewardCoins]);
+
+        $upCode = $pdo->prepare("UPDATE `redeem_codes` SET `used_count` = `used_count` + 1 WHERE `id` = ?");
+        $upCode->execute([$codeRow['id']]);
+
+        $upUser = $pdo->prepare("UPDATE `user_rewards` SET `coins` = `coins` + ?, `total_earned` = `total_earned` + ? WHERE `user_id` = ?");
+        $upUser->execute([$rewardCoins, $rewardCoins, $userId]);
+
+        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
+        $log->execute([$userId, $rewardCoins, "Redeemed monthly code: {$inputCode}"]);
+
+        $pdo->commit();
+
+        $newRow = getUserRewardsRow($pdo, $userId);
+        echo json_encode([
+            'success' => true,
+            'earned_coins' => $rewardCoins,
+            'coins' => intval($newRow['coins']),
+            'message' => "🎉 Code redeemed successfully! +{$rewardCoins} Flow Coins added to your account balance!"
+        ]);
+        exit;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo json_encode(['success' => false, 'message' => 'Could not process redeem code. Please try again.']);
+        exit;
+    }
+}
+
+// --- 7. REQUEST CASHOUT / PAYOUT ---
 if ($action === 'request_payout') {
     $csrf = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
     if (!verifyCsrfToken($csrf)) {
