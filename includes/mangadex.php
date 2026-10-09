@@ -480,7 +480,11 @@ class MangaDexAPI {
             return ChaptersFallback::getPages($chapterId);
         }
 
-        $res = self::request("/at-home/server/{$chapterId}", [], 600);
+        $res = self::request("/at-home/server/{$chapterId}", ['forcePort443' => 'true'], 300);
+        if (!$res || empty($res['baseUrl']) || empty($res['chapter']['hash'])) {
+            // Immediate fresh retry bypassing cache if previous node expired
+            $res = self::request("/at-home/server/{$chapterId}", ['forcePort443' => 'true'], 0);
+        }
         if (!$res || empty($res['baseUrl']) || empty($res['chapter']['hash'])) {
             return [];
         }

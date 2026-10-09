@@ -67,9 +67,14 @@ if ($isLive) {
     // Fetch real pages from MangaDex @Home CDN
     $pageUrls = MangaDexAPI::getChapterPagesLive($mdChapterId, true);
     foreach ($pageUrls as $pIndex => $pUrl) {
+        $imgSrc = $pUrl;
+        if (strpos($pUrl, 'mangadex.network') !== false || strpos($pUrl, 'mangadex.org') !== false) {
+            $imgSrc = BASE_URL . 'api/image_proxy.php?url=' . urlencode($pUrl);
+        }
         $pages[] = [
             'page_number' => $pIndex + 1,
-            'image_url' => $pUrl
+            'image_url' => $imgSrc,
+            'fallback_url' => $pUrl
         ];
     }
 
@@ -388,10 +393,12 @@ require_once __DIR__ . '/includes/header.php';
                 <?php foreach ($pages as $p): ?>
                     <div class="w-full bg-black leading-none p-0 m-0 text-[0px] select-none">
                         <img src="<?= htmlspecialchars($p['image_url']) ?>" 
+                             data-fallback="<?= htmlspecialchars($p['fallback_url'] ?? $p['image_url']) ?>"
                              alt="Chapter <?= $chapter['chapter_number'] ?> - Page <?= $p['page_number'] ?>" 
                              referrerpolicy="no-referrer"
                              loading="lazy"
                              decoding="async"
+                             onerror="handleImageFallback(this)"
                              class="w-full h-auto block p-0 m-0 border-0 outline-none select-none max-w-full">
                     </div>
                 <?php endforeach; ?>
@@ -945,6 +952,54 @@ async function likeComment(commentId, btnEl) {
         }, { passive: true });
     }
 })();
+
+// ==========================================
+// 9. Intelligent Image Error Fallback & Retry
+// ==========================================
+function handleImageFallback(img) {
+    if (!img.dataset.retried) {
+        img.dataset.retried = '1';
+        const fallback = img.getAttribute('data-fallback');
+        // If current image used proxy, attempt direct CDN url; if it was direct, attempt proxy
+        if (img.src.includes('api/image_proxy.php')) {
+            if (fallback && fallback !== img.src) {
+                img.src = fallback;
+                return;
+            }
+        } else {
+            img.src = '<?= BASE_URL ?>api/image_proxy.php?url=' + encodeURIComponent(img.src);
+            return;
+        }
+    }
+
+    // If both direct and proxy failed, render a clean styled retry box
+    img.style.display = 'none';
+    const existingBox = img.parentNode.querySelector('.img-retry-box');
+    if (!existingBox) {
+        const errBox = document.createElement('div');
+        errBox.className = 'img-retry-box w-full py-10 text-center text-xs text-slate-400 bg-dark-900 border border-dark-800 my-2 rounded-xl flex flex-col items-center justify-center gap-2.5';
+        errBox.innerHTML = `
+            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-lg"></i>
+            <span>Page failed to load</span>
+            <button onclick="retryImgLoad(this)" class="px-4 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs transition-colors shadow-md">
+                <i class="fa-solid fa-rotate-right mr-1"></i> Retry Page
+            </button>
+        `;
+        img.parentNode.appendChild(errBox);
+    }
+}
+
+function retryImgLoad(btn) {
+    const parent = btn.closest('.img-retry-box').parentNode;
+    const img = parent.querySelector('img');
+    const errBox = btn.closest('.img-retry-box');
+    if (img) {
+        img.dataset.retried = '';
+        img.style.display = 'block';
+        img.src = img.src + (img.src.includes('?') ? '&' : '?') + 'r=' + Date.now();
+    }
+    if (errBox) errBox.remove();
+}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
