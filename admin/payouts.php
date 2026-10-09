@@ -80,6 +80,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <a href="<?= BASE_URL ?>admin/index.php" class="text-xs text-brand-400 hover:text-brand-300 font-bold">
                     &larr; Admin Dashboard
                 </a>
+                <span class="text-slate-600">&bull;</span>
+                <a href="<?= BASE_URL ?>admin/redeem_codes.php" class="text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-ticket text-[10px]"></i> Redeem Codes
+                </a>
             </div>
             <h1 class="text-2xl sm:text-3xl font-black text-white mt-1">
                 GCash &amp; Load Payout Requests

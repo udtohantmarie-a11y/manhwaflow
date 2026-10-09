@@ -90,6 +90,10 @@ require_once __DIR__ . '/../includes/header.php';
                     </span>
                 <?php endif; ?>
             </a>
+            <a href="<?= BASE_URL ?>admin/redeem_codes.php" 
+               class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-950/40 transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-ticket"></i> Redeem Codes
+            </a>
             <button onclick="document.getElementById('pwd-modal').classList.remove('hidden')" 
                     class="px-3.5 py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-amber-400 border border-amber-500/30 font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-key"></i> Security / Password

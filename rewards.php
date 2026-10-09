@@ -360,24 +360,24 @@ $rankData = calcRank($totalEarned);
                         <i class="fa-brands fa-facebook-f"></i>
                     </div>
                     <div class="space-y-1">
-                        <h3 class="text-sm font-bold text-white">Saan makikita ang mga Redeem Code?</h3>
+                        <h3 class="text-sm font-bold text-white">Where to Find Monthly Redeem Codes?</h3>
                         <p class="text-xs text-slate-300 leading-relaxed">
-                            Hindi po direktang inilalagay ang mga code dito sa loob ng website! Ipinapaskil po ang mga <strong>official monthly redeem codes</strong> sa ating opisyal na <strong>Facebook Page</strong> buwan-buwan. I-follow at i-like ang aming page para lagi kang updated sa bagong codes!
+                            Redeem codes are not published directly on this website! Instead, our <strong>official monthly gift codes and vouchers</strong> are posted exclusively on our <strong>Facebook Page</strong> every month. Follow and like our page to get this month's active codes and stay updated!
                         </p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 text-[11px] text-slate-300">
                     <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
                         <i class="fa-solid fa-bell text-amber-400"></i>
-                        <span>1. I-Follow ang Facebook Page</span>
+                        <span>1. Follow our Facebook Page</span>
                     </div>
                     <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
                         <i class="fa-solid fa-bullhorn text-emerald-400"></i>
-                        <span>2. Kunin ang monthly promo code</span>
+                        <span>2. Copy the monthly code</span>
                     </div>
                     <div class="bg-dark-850/80 rounded-xl p-2.5 border border-dark-800 flex items-center gap-2">
                         <i class="fa-solid fa-gift text-brand-400"></i>
-                        <span>3. I-paste dito para sa coins!</span>
+                        <span>3. Paste here for free coins!</span>
                     </div>
                 </div>
             </div>
@@ -405,7 +405,7 @@ $rankData = calcRank($totalEarned);
                     </form>
                 <?php else: ?>
                     <div class="text-center py-4 space-y-3">
-                        <p class="text-xs text-slate-400">Kailangang naka-login upang ma-claim ang free redeem points sa iyong account.</p>
+                        <p class="text-xs text-slate-400">Sign in is required to claim free bonus points to your account.</p>
                         <a href="<?= BASE_URL ?>login.php?redirect=rewards.php" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md">
                             <i class="fa-solid fa-right-to-bracket text-xs"></i> Sign In to Redeem
                         </a>
