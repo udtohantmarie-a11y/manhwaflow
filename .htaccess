@@ -33,11 +33,17 @@ Options -Indexes
     </IfModule>
 </Files>
 
-# 4. Block Dangerous HTTP Methods (Trace, Track)
+# 4. Block Dangerous HTTP Methods & Auto-Redirect to HTTPS
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK)
     RewriteRule .* - [F]
+
+    # Force HTTPS on production (auto-redirects to secure padlock)
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteCond %{HTTP_HOST} ^(www\.)?manhwaflow\.site\.je [NC]
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 </IfModule>
 
 # 5. Security Response Headers
@@ -51,8 +57,8 @@ Options -Indexes
     # Enable Cross-Site Scripting (XSS) filter built into browsers
     Header set X-XSS-Protection "1; mode=block"
     
-    # Privacy Referrer policy
-    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    # Referrer policy: no-referrer (prevents CDN image hotlinking blocks)
+    Header set Referrer-Policy "no-referrer"
     
     # Permissions Policy (restrict dangerous browser features)
     Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
