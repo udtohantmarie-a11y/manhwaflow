@@ -656,23 +656,15 @@ function setReaderWidth(width, btnEl) {
 // ==========================================
 let isReaderFullscreen = false;
 
-function toggleFullscreen() {
-    isReaderFullscreen = !isReaderFullscreen;
-
-    const docEl = document.documentElement;
+function applyFullscreenUI(enable) {
     const body = document.body;
     const header = document.getElementById('reader-sticky-bar');
     const canvas = document.getElementById('reader-canvas-wrapper');
     const floatingBtn = document.getElementById('btn-floating-exit-fullscreen');
     const bottomAd = document.getElementById('mf-sticky-bottom-banner');
     const icon = document.getElementById('fullscreen-icon');
-    const isNativeFS = document.fullscreenElement || 
-                       document.webkitFullscreenElement || 
-                       document.mozFullScreenElement || 
-                       document.msFullscreenElement;
 
-    if (isReaderFullscreen) {
-        // 1. Enter Immersive UI State
+    if (enable) {
         body.classList.add('reader-fullscreen-active');
         if (header) {
             header.classList.add('-translate-y-full', 'pointer-events-none');
@@ -693,23 +685,7 @@ function toggleFullscreen() {
             icon.classList.remove('fa-expand');
             icon.classList.add('fa-compress');
         }
-
-        // 2. Request native browser fullscreen (Android Chrome / PC)
-        if (!isNativeFS) {
-            try {
-                if (docEl.requestFullscreen) {
-                    docEl.requestFullscreen().catch(() => {});
-                } else if (docEl.webkitRequestFullscreen) {
-                    docEl.webkitRequestFullscreen();
-                } else if (docEl.mozRequestFullScreen) {
-                    docEl.mozRequestFullScreen();
-                } else if (docEl.msRequestFullscreen) {
-                    docEl.msRequestFullscreen();
-                }
-            } catch(e) {}
-        }
     } else {
-        // 1. Exit Immersive UI State
         body.classList.remove('reader-fullscreen-active');
         if (header) {
             header.classList.remove('-translate-y-full', 'pointer-events-none');
@@ -730,8 +706,45 @@ function toggleFullscreen() {
             icon.classList.remove('fa-compress');
             icon.classList.add('fa-expand');
         }
+    }
+}
 
-        // 2. Exit native browser fullscreen if currently active
+function toggleFullscreen() {
+    isReaderFullscreen = !isReaderFullscreen;
+
+    const docEl = document.documentElement;
+    const isNativeFS = document.fullscreenElement || 
+                       document.webkitFullscreenElement || 
+                       document.mozFullScreenElement || 
+                       document.msFullscreenElement;
+
+    if (isReaderFullscreen) {
+        try {
+            localStorage.setItem('mf_reader_fullscreen', '1');
+        } catch(e) {}
+        applyFullscreenUI(true);
+
+        // Native Browser Fullscreen (Android Chrome / PC)
+        if (!isNativeFS) {
+            try {
+                if (docEl.requestFullscreen) {
+                    docEl.requestFullscreen().catch(() => {});
+                } else if (docEl.webkitRequestFullscreen) {
+                    docEl.webkitRequestFullscreen();
+                } else if (docEl.mozRequestFullScreen) {
+                    docEl.mozRequestFullScreen();
+                } else if (docEl.msRequestFullscreen) {
+                    docEl.msRequestFullscreen();
+                }
+            } catch(e) {}
+        }
+    } else {
+        try {
+            localStorage.removeItem('mf_reader_fullscreen');
+        } catch(e) {}
+        applyFullscreenUI(false);
+
+        // Exit Native Browser Fullscreen
         if (isNativeFS) {
             try {
                 if (document.exitFullscreen) {
@@ -748,29 +761,44 @@ function toggleFullscreen() {
     }
 }
 
-// Sync fullscreen button icon with browser changes (e.g. Esc key or system gesture)
+// Automatically restore Fullscreen state when navigating to Next / Previous Chapter
+(function initPersistedFullscreen() {
+    try {
+        if (localStorage.getItem('mf_reader_fullscreen') === '1') {
+            isReaderFullscreen = true;
+            applyFullscreenUI(true);
+
+            // Re-engage native browser fullscreen on user's first tap or scroll
+            const resumeNative = () => {
+                if (isReaderFullscreen) {
+                    const isNative = document.fullscreenElement || document.webkitFullscreenElement;
+                    if (!isNative) {
+                        const doc = document.documentElement;
+                        if (doc.requestFullscreen) doc.requestFullscreen().catch(() => {});
+                        else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+                    }
+                }
+            };
+            window.addEventListener('click', resumeNative, { once: true });
+            window.addEventListener('touchstart', resumeNative, { once: true, passive: true });
+            window.addEventListener('scroll', resumeNative, { once: true, passive: true });
+        }
+    } catch(e) {}
+})();
+
+// Update icon if native fullscreen state changes, but NEVER drop reader mode when typing comments
 ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
     document.addEventListener(evt, () => {
-        const isNativeFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
         const icon = document.getElementById('fullscreen-icon');
         const floatingBtn = document.getElementById('btn-floating-exit-fullscreen');
-        if (!isNativeFS && isReaderFullscreen) {
-            toggleFullscreen();
-        } else if (icon) {
-            if (isNativeFS || isReaderFullscreen) {
+        if (isReaderFullscreen) {
+            if (icon) {
                 icon.classList.remove('fa-expand');
                 icon.classList.add('fa-compress');
-                if (floatingBtn) {
-                    floatingBtn.classList.remove('hidden');
-                    floatingBtn.classList.add('flex');
-                }
-            } else {
-                icon.classList.remove('fa-compress');
-                icon.classList.add('fa-expand');
-                if (floatingBtn) {
-                    floatingBtn.classList.add('hidden');
-                    floatingBtn.classList.remove('flex');
-                }
+            }
+            if (floatingBtn) {
+                floatingBtn.classList.remove('hidden');
+                floatingBtn.classList.add('flex');
             }
         }
     });
@@ -961,6 +989,36 @@ window.addEventListener('keyup', (e) => {
     }
 }, { capture: true, passive: false });
 
+// Toast notification (Non-blocking, preserves Fullscreen mode)
+function showReaderToast(message, type = 'brand') {
+    const existing = document.getElementById('reader-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'reader-toast';
+    let borderClass = 'border-brand-500/60 text-white';
+    let iconClass = 'fa-coins text-amber-400 animate-bounce';
+    if (type === 'emerald') {
+        borderClass = 'border-emerald-500/60 text-emerald-200';
+        iconClass = 'fa-circle-check text-emerald-400';
+    } else if (type === 'rose') {
+        borderClass = 'border-rose-500/60 text-rose-200';
+        iconClass = 'fa-circle-exclamation text-rose-400';
+    } else if (type === 'amber') {
+        borderClass = 'border-amber-500/60 text-amber-200';
+        iconClass = 'fa-triangle-exclamation text-amber-400';
+    }
+
+    toast.className = `fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-dark-900/95 backdrop-blur-md border ${borderClass} px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs sm:text-sm font-bold transition-all duration-300 transform translate-y-0`;
+    toast.innerHTML = `<i class="fa-solid ${iconClass} text-base shrink-0"></i> <span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-4');
+        setTimeout(() => toast.remove(), 400);
+    }, 3500);
+}
+
 // 5. Submit Chapter Comment
 async function submitComment(e) {
     e.preventDefault();
@@ -1012,16 +1070,20 @@ async function submitComment(e) {
             if (counter) counter.textContent = data.count;
 
             if (data.coins_awarded && data.coins_awarded > 0) {
-                alert("🎉 Tagumpay! Naka-earn ka ng +" + data.coins_awarded + " Flow Coins para sa iyong comment!");
+                showReaderToast(`🎉 Tagumpay! +${data.coins_awarded} Flow Coins credited!`, 'emerald');
+            } else {
+                showReaderToast("💬 Na-post ang iyong comment!", 'emerald');
             }
         } else if (data.auth_required) {
-            alert(data.message || 'Please log in to leave a comment.');
-            window.location.href = '<?= BASE_URL ?>login.php?redirect=' + encodeURIComponent(window.location.href);
+            showReaderToast(data.message || 'Please log in to leave a comment.', 'rose');
+            setTimeout(() => {
+                window.location.href = '<?= BASE_URL ?>login.php?redirect=' + encodeURIComponent(window.location.href);
+            }, 1500);
         } else {
-            alert(data.message || 'Could not post comment.');
+            showReaderToast(data.message || 'Could not post comment.', 'rose');
         }
     } catch (err) {
-        alert('Network error while posting comment.');
+        showReaderToast('Network error while posting comment.', 'rose');
     } finally {
         if (btn) btn.disabled = false;
     }
