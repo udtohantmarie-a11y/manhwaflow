@@ -883,7 +883,7 @@ class ChaptersFallback {
                 'status' => 'Ongoing',
                 'type' => $type ?: 'Manhwa',
                 'rating' => number_format(4.7 + (abs(crc32($slug)) % 30) / 100, 1),
-                'tags' => ['Romance', 'Drama', 'Athrea'],
+                'tags' => ['Romance', 'Drama', 'Webtoon'],
                 'latest_chapter' => $latest
             ];
         }
@@ -896,7 +896,7 @@ class ChaptersFallback {
     }
 
     /**
-     * Get detailed metadata for an Athrea Scans series
+     * Get detailed metadata for an Athrea series
      */
     public static function getAthreaDetails($slug) {
         $cacheFile = self::CACHE_DIR . "/athrea_details_{$slug}.json";
@@ -943,7 +943,12 @@ class ChaptersFallback {
         // Genres
         $genres = [];
         if (preg_match_all('/<a[^>]+href=["\'](?:https:\/\/athreascans\.com)?\/genres\/[^"\']+\/["\'][^>]*>(.*?)<\/a>/i', $html, $g)) {
-            $genres = array_values(array_unique(array_map('trim', $g[1])));
+            $rawGenres = array_values(array_unique(array_map('trim', $g[1])));
+            foreach ($rawGenres as $rg) {
+                if (stripos($rg, 'scans') === false && stripos($rg, 'athrea') === false) {
+                    $genres[] = $rg;
+                }
+            }
         }
         if (empty($genres)) {
             $genres = ['Romance', 'Drama', 'Webtoon'];
@@ -956,9 +961,12 @@ class ChaptersFallback {
         }
 
         // Author
-        $author = 'Athrea Scans';
+        $author = 'Webtoon Studio';
         if (preg_match('/Author<\/b>[\s\S]*?<span>(.*?)<\/span>/i', $html, $au)) {
-            $author = html_entity_decode(trim(strip_tags($au[1])), ENT_QUOTES | ENT_HTML5);
+            $candidateAuthor = html_entity_decode(trim(strip_tags($au[1])), ENT_QUOTES | ENT_HTML5);
+            if (!empty($candidateAuthor) && stripos($candidateAuthor, 'athrea') === false && stripos($candidateAuthor, 'scans') === false) {
+                $author = $candidateAuthor;
+            }
         }
 
         $details = [
@@ -979,6 +987,340 @@ class ChaptersFallback {
         }
 
         return $details;
+    }
+
+    /**
+     * Get detailed metadata for an Asura series
+     */
+    public static function getAsuraDetails($slug) {
+        $cacheFile = self::CACHE_DIR . "/asura_details_{$slug}.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::ASURA_BASE . "/comics/{$slug}";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: null;
+            return null;
+        }
+
+        // Title
+        $title = ucwords(str_replace('-', ' ', $slug));
+        if (preg_match('/<title>(.*?)<\/title>/i', $html, $tm)) {
+            $rawTitle = preg_replace('/\|.*$/', '', $tm[1]);
+            $rawTitle = preg_replace('/-.*$/', '', $rawTitle);
+            $title = html_entity_decode(trim($rawTitle), ENT_QUOTES | ENT_HTML5);
+        } elseif (preg_match('/<h1[^>]*>(.*?)<\/h1>/is', $html, $hm)) {
+            $title = html_entity_decode(trim(strip_tags($hm[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Cover
+        $cover = '';
+        if (preg_match('/https:\/\/cdn\.asurascans\.com\/asura-images\/covers\/[^"\'\s&<>]+?\.(?:webp|jpg|png)/i', $html, $cm)) {
+            $cover = trim($cm[0]);
+        }
+
+        // Synopsis
+        $synopsis = 'Read this trending webtoon series online on ManhwaFlow with official chapters.';
+        if (preg_match('/<span class="font-medium text-sm text-\[#A2A2A2\][^"]*">(.*?)<\/span>/is', $html, $sm)) {
+            $synopsis = html_entity_decode(trim(strip_tags($sm[1])), ENT_QUOTES | ENT_HTML5);
+        } elseif (preg_match('/<div[^>]*class="[^"]*text-sm[^"]*"[^>]*>(.*?)<\/div>/is', $html, $sm)) {
+            $synopsis = html_entity_decode(trim(strip_tags($sm[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Genres
+        $genres = ['Action', 'Fantasy', 'Adventure'];
+        if (preg_match_all('/<button[^>]*class="[^"]*rounded-md[^"]*"[^>]*>(.*?)<\/button>/is', $html, $gm)) {
+            $extracted = array_values(array_filter(array_unique(array_map('trim', array_map('strip_tags', $gm[1])))));
+            if (!empty($extracted)) {
+                $filtered = [];
+                foreach ($extracted as $e) {
+                    if (stripos($e, 'scans') === false && stripos($e, 'asura') === false) {
+                        $filtered[] = $e;
+                    }
+                }
+                if (!empty($filtered)) {
+                    $genres = array_slice($filtered, 0, 5);
+                }
+            }
+        }
+
+        $details = [
+            'id' => "asura_{$slug}",
+            'slug' => $slug,
+            'title' => $title,
+            'cover_url' => $cover,
+            'synopsis' => $synopsis,
+            'genres' => $genres,
+            'status' => 'Ongoing',
+            'author' => 'Webtoon Studio',
+            'type' => 'Manhwa',
+            'rating' => number_format(4.8 + (abs(crc32($slug)) % 20) / 100, 1)
+        ];
+
+        if (!empty($cover)) {
+            @file_put_contents($cacheFile, json_encode($details));
+        }
+
+        return $details;
+    }
+
+    /**
+     * Get detailed metadata for an Anisa series
+     */
+    public static function getAnisaDetails($slug) {
+        $cacheFile = self::CACHE_DIR . "/anisa_details_{$slug}.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::ANISA_BASE . "/manga/{$slug}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: null;
+            return null;
+        }
+
+        // Title
+        $title = ucwords(str_replace('-', ' ', $slug));
+        if (preg_match('/<title>(.*?)<\/title>/i', $html, $tm)) {
+            $rawTitle = preg_replace('/&#8211;.*$/i', '', $tm[1]);
+            $rawTitle = preg_replace('/-.*$/i', '', $rawTitle);
+            $rawTitle = preg_replace('/\|.*$/i', '', $rawTitle);
+            $title = html_entity_decode(trim($rawTitle), ENT_QUOTES | ENT_HTML5);
+        } elseif (preg_match('/<div class="post-title"[^>]*>[\s\S]*?<h1>(.*?)<\/h1>/i', $html, $tm)) {
+            $title = html_entity_decode(trim(strip_tags($tm[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Cover
+        $cover = '';
+        if (preg_match('/<div class="summary_image"[^>]*>[\s\S]*?<img[^>]+src="([^">]+)"/i', $html, $cm)) {
+            $cover = trim($cm[1]);
+        }
+
+        // Synopsis
+        $synopsis = 'Read this trending webtoon series online on ManhwaFlow with official chapters.';
+        if (preg_match('/<div class="description-summary"[^>]*>[\s\S]*?<div class="summary__content[^"]*"[^>]*>(.*?)<\/div>/is', $html, $sm)) {
+            $synopsis = html_entity_decode(trim(strip_tags($sm[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Genres
+        $genres = [];
+        if (preg_match_all('/<div class="genres-content"[^>]*>[\s\S]*?<\/div>/is', $html, $gm)) {
+            if (preg_match_all('/<a[^>]+>(.*?)<\/a>/i', $gm[0][0], $ga)) {
+                $rawGenres = array_values(array_filter(array_unique(array_map('trim', array_map('strip_tags', $ga[1])))));
+                foreach ($rawGenres as $rg) {
+                    if (stripos($rg, 'scans') === false && stripos($rg, 'anisa') === false) {
+                        $genres[] = $rg;
+                    }
+                }
+            }
+        }
+        if (empty($genres)) {
+            $genres = ['Action', 'Fantasy', 'Shounen'];
+        }
+
+        $details = [
+            'id' => "anisa_{$slug}",
+            'slug' => $slug,
+            'title' => $title,
+            'cover_url' => $cover,
+            'synopsis' => $synopsis,
+            'genres' => $genres,
+            'status' => 'Ongoing',
+            'author' => 'Webtoon Studio',
+            'type' => 'Manhwa',
+            'rating' => number_format(4.8 + (abs(crc32($slug)) % 20) / 100, 1)
+        ];
+
+        if (!empty($cover)) {
+            @file_put_contents($cacheFile, json_encode($details));
+        }
+
+        return $details;
+    }
+
+    /**
+     * Unified Exclusive Spotlight: Top trending webtoons from multiple sources
+     * Neutral presentation with no 3rd-party source mentions.
+     */
+    public static function getExclusiveSpotlight($limit = 12) {
+        $cacheFile = self::CACHE_DIR . "/exclusive_spotlight_cache.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached) && count($cached) >= 6) {
+                return array_slice($cached, 0, $limit);
+            }
+        }
+
+        $curatedList = [
+            [
+                'id' => 'asura_nano-machine',
+                'slug' => 'nano-machine',
+                'title' => 'Nano Machine',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.9',
+                'tags' => ['Action', 'Murim', 'System'],
+                'latest_chapter' => 'Ch. 250+'
+            ],
+            [
+                'id' => 'asura_return-of-the-mount-hua-sect',
+                'slug' => 'return-of-the-mount-hua-sect',
+                'title' => 'Return of the Mount Hua Sect',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.b23eec.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.9',
+                'tags' => ['Action', 'Martial Arts', 'Reincarnation'],
+                'latest_chapter' => 'Ch. 140+'
+            ],
+            [
+                'id' => 'asura_the-greatest-estate-developer',
+                'slug' => 'the-greatest-estate-developer',
+                'title' => 'The Greatest Estate Developer',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.e91f63.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.9',
+                'tags' => ['Comedy', 'Fantasy', 'System'],
+                'latest_chapter' => 'Ch. 180+'
+            ],
+            [
+                'id' => 'asura_revenge-of-the-iron-blooded-sword-hound',
+                'slug' => 'revenge-of-the-iron-blooded-sword-hound',
+                'title' => 'Revenge of the Iron-Blooded Sword Hound',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.25624d.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'Reincarnation', 'Fantasy'],
+                'latest_chapter' => 'Ch. 110+'
+            ],
+            [
+                'id' => 'anisa_mr-kim-strikes-it-rich-with-auto-hunting',
+                'slug' => 'mr-kim-strikes-it-rich-with-auto-hunting',
+                'title' => 'Mr. Kim Strikes It Rich with Auto-Hunting',
+                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459347-6aa8fb938e3fd-mrkimstrikesitrichwithautohunting-16204-193x278.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'Hunter', 'Fantasy'],
+                'latest_chapter' => 'Ch. 50+'
+            ],
+            [
+                'id' => 'anisa_starting-with-x10-you-really-exploited-the-bug',
+                'slug' => 'starting-with-x10-you-really-exploited-the-bug',
+                'title' => 'Starting with 10x, You Really Exploited the Bug',
+                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459350-13f5fb938e55c-startingwithx10youreallyexploitedthebug-16203-193x278.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'System', 'Adventure'],
+                'latest_chapter' => 'Ch. 45+'
+            ],
+            [
+                'id' => 'anisa_wildcard-alchemist',
+                'slug' => 'wildcard-alchemist',
+                'title' => 'Wildcard Alchemist',
+                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459356-0752fb938e8cb-wildcardalchemist-16200-193x278.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.7',
+                'tags' => ['Fantasy', 'Magic', 'Shounen'],
+                'latest_chapter' => 'Ch. 30+'
+            ],
+            [
+                'id' => 'athrea_flower-punch',
+                'slug' => 'flower-punch',
+                'title' => 'Flower Punch',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/Flower-Punch-300x400.jpg',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.9',
+                'tags' => ['Romance', 'Drama', 'Comedy'],
+                'latest_chapter' => 'Ch. 40+'
+            ],
+            [
+                'id' => 'athrea_trembling-as-i-escape-from-you',
+                'slug' => 'trembling-as-i-escape-from-you',
+                'title' => 'Trembling as I Escape From You',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/Trembling-as-I-Escape-From-You-300x400.jpg',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Romance', 'Drama', 'Fantasy'],
+                'latest_chapter' => 'Ch. 35+'
+            ],
+            [
+                'id' => 'athrea_my-teacher-will-take-care-of-it',
+                'slug' => 'my-teacher-will-take-care-of-it',
+                'title' => 'My Teacher Will Take Care of It',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/My-Teacher-Will-Take-Care-of-It-300x400.jpg',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Romance', 'Drama', 'School'],
+                'latest_chapter' => 'Ch. 28+'
+            ],
+            [
+                'id' => 'athrea_the-abandoned-duchess',
+                'slug' => 'the-abandoned-duchess',
+                'title' => 'The Abandoned Duchess',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/The-Abandoned-Duchess-300x400.jpg',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Romance', 'Royalty', 'Drama'],
+                'latest_chapter' => 'Ch. 50+'
+            ],
+            [
+                'id' => 'asura_standard-of-reincarnation',
+                'slug' => 'standard-of-reincarnation',
+                'title' => 'Standard of Reincarnation',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/standard-of-reincarnation.7c18ee.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'Fantasy', 'Reincarnation'],
+                'latest_chapter' => 'Ch. 125+'
+            ]
+        ];
+
+        // Also merge dynamic titles from directory
+        $athreaLive = self::getAthreaDirectory(10);
+        foreach ($athreaLive as $al) {
+            $exists = false;
+            foreach ($curatedList as $cl) {
+                if ($cl['id'] === $al['id']) { $exists = true; break; }
+            }
+            if (!$exists) {
+                $curatedList[] = $al;
+            }
+        }
+
+        @file_put_contents($cacheFile, json_encode($curatedList));
+        return array_slice($curatedList, 0, $limit);
     }
 
     /**

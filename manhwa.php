@@ -14,34 +14,59 @@ $genres = [];
 $chapters = [];
 $relatedManhwas = [];
 
-if (str_starts_with($rawId, 'athrea_')) {
-    // --- ATHREA SCANS LIVE MODE ---
+if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || str_starts_with($rawId, 'anisa_')) {
+    // --- MULTI-SOURCE WEBTOON LIVE MODE (ATHREA, ASURA, ANISA) ---
     require_once __DIR__ . '/includes/chapters_fallback.php';
-    $athreaSlug = substr($rawId, 7);
-    $athreaData = ChaptersFallback::getAthreaDetails($athreaSlug);
+    
+    if (str_starts_with($rawId, 'athrea_')) {
+        $sourceSlug = substr($rawId, 7);
+        $sourceData = ChaptersFallback::getAthreaDetails($sourceSlug);
+        $liveChapters = ChaptersFallback::getAthreaChapters($sourceSlug, 1000);
+    } elseif (str_starts_with($rawId, 'asura_')) {
+        $sourceSlug = substr($rawId, 6);
+        $sourceData = ChaptersFallback::getAsuraDetails($sourceSlug);
+        $liveChapters = ChaptersFallback::getAsuraChapters($sourceSlug, 1000);
+    } else {
+        $sourceSlug = substr($rawId, 6);
+        $sourceData = ChaptersFallback::getAnisaDetails($sourceSlug);
+        $liveChapters = ChaptersFallback::getAnisaChapters($sourceSlug, 1000);
+    }
 
-    if (!$athreaData) {
-        die("Series not found on Athrea Scans. <a href='" . BASE_URL . "'>Return to Home</a>");
+    if (!$sourceData) {
+        die("Series not found. <a href='" . BASE_URL . "'>Return to Home</a>");
+    }
+
+    $cleanAuthor = $sourceData['author'] ?? 'Webtoon Studio';
+    if (stripos($cleanAuthor, 'scans') !== false || stripos($cleanAuthor, 'asura') !== false || stripos($cleanAuthor, 'athrea') !== false || stripos($cleanAuthor, 'anisa') !== false) {
+        $cleanAuthor = 'Webtoon Studio';
+    }
+
+    $coverUrl = $sourceData['cover_url'] ?? '';
+    if (str_contains($coverUrl, 'athreascans.com') || str_contains($coverUrl, 'anisascans.in')) {
+        $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
     }
 
     $manhwa = [
         'id' => $rawId,
-        'title' => $athreaData['title'],
-        'slug' => 'athrea-' . $athreaSlug,
-        'alt_title' => $athreaData['title'],
-        'author' => $athreaData['author'] ?? 'Athrea Scans',
-        'artist' => $athreaData['author'] ?? 'Athrea Scans',
-        'status' => $athreaData['status'] ?? 'Ongoing',
-        'type' => $athreaData['type'] ?? 'Manhwa',
-        'rating' => $athreaData['rating'] ?? 4.9,
-        'views' => rand(15000, 65000),
-        'synopsis' => $athreaData['synopsis'] ?? 'Read online at ManhwaFlow.',
-        'cover_image' => $athreaData['cover_url'],
-        'banner_image' => $athreaData['cover_url'],
+        'title' => $sourceData['title'],
+        'slug' => preg_replace('/[^a-z0-9]+/i', '-', strtolower($sourceData['title'])),
+        'alt_title' => $sourceData['title'],
+        'author' => $cleanAuthor,
+        'artist' => $cleanAuthor,
+        'status' => $sourceData['status'] ?? 'Ongoing',
+        'type' => $sourceData['type'] ?? 'Manhwa',
+        'rating' => $sourceData['rating'] ?? 4.9,
+        'views' => rand(25000, 95000),
+        'synopsis' => $sourceData['synopsis'] ?? 'Read online at ManhwaFlow.',
+        'cover_image' => $coverUrl,
+        'banner_image' => $coverUrl,
         'is_live' => true
     ];
 
-    foreach ($athreaData['genres'] as $idx => $t) {
+    foreach ($sourceData['genres'] as $idx => $t) {
+        if (stripos($t, 'scans') !== false || stripos($t, 'athrea') !== false || stripos($t, 'asura') !== false || stripos($t, 'anisa') !== false) {
+            continue;
+        }
         $genres[] = [
             'id' => $idx + 1,
             'name' => $t,
@@ -49,7 +74,6 @@ if (str_starts_with($rawId, 'athrea_')) {
         ];
     }
 
-    $liveChapters = ChaptersFallback::getAthreaChapters($athreaSlug, 1000);
     // Sort DESC for chapter list display
     usort($liveChapters, function($a, $b) {
         return $b['chapter_number'] <=> $a['chapter_number'];
@@ -57,7 +81,7 @@ if (str_starts_with($rawId, 'athrea_')) {
 
     foreach ($liveChapters as $lc) {
         $lc['read_url'] = BASE_URL . "reader.php?md_ch=" . urlencode($lc['id']) . "&md_manga=" . urlencode($rawId) . "&ch_num=" . $lc['chapter_number'];
-        $lc['views'] = rand(1200, 6500);
+        $lc['views'] = rand(1500, 8500);
         $chapters[] = $lc;
     }
 
@@ -176,16 +200,28 @@ if (str_starts_with($rawId, 'athrea_')) {
 }
 
 // Check Reading History for this series
-$userToken = !empty($_SESSION['user_id']) ? 'user_' . $_SESSION['user_id'] : ($_COOKIE['guest_reader_token'] ?? '');
+$userId = $_SESSION['user_id'] ?? null;
+$guestCookie = $_COOKIE['guest_reader_token'] ?? '';
 $lastReadChapter = null;
-if (!empty($userToken)) {
+
+if ($userId) {
     try {
         $stmtHist = $pdo->prepare("
             SELECT * FROM `reading_history` 
-            WHERE (`user_id` = ? OR `user_token` = ?) AND `series_id` = ? 
+            WHERE `user_id` = ? AND `series_id` = ? 
             LIMIT 1
         ");
-        $stmtHist->execute([$_SESSION['user_id'] ?? null, $userToken, strval($manhwa['id'])]);
+        $stmtHist->execute([$userId, strval($manhwa['id'])]);
+        $lastReadChapter = $stmtHist->fetch();
+    } catch (PDOException $e) {}
+} elseif (!empty($guestCookie)) {
+    try {
+        $stmtHist = $pdo->prepare("
+            SELECT * FROM `reading_history` 
+            WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` = ? 
+            LIMIT 1
+        ");
+        $stmtHist->execute([$guestCookie, strval($manhwa['id'])]);
         $lastReadChapter = $stmtHist->fetch();
     } catch (PDOException $e) {}
 }

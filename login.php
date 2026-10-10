@@ -45,6 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['avatar'] = $user['avatar'];
 
+                // Migrate guest reading history to logged-in user account
+                $guestToken = $_COOKIE['guest_reader_token'] ?? '';
+                if (!empty($guestToken)) {
+                    try {
+                        $pdo->prepare("UPDATE `reading_history` SET `user_id` = ?, `user_token` = ? WHERE `user_token` = ? AND `user_id` IS NULL")
+                            ->execute([$user['id'], 'user_' . $user['id'], $guestToken]);
+                    } catch (Exception $e) {}
+                    setcookie('guest_reader_token', '', time() - 3600, '/');
+                }
+
                 // Open redirect prevention
                 $redirectParam = $_GET['redirect'] ?? '';
                 $safeRedirect = sanitizeRedirectUrl($redirectParam, ($user['role'] === 'admin' ? BASE_URL . 'admin/index.php' : BASE_URL));

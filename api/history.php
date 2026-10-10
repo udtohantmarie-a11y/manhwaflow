@@ -95,14 +95,14 @@ if ($action === 'get') {
         if ($userId) {
             $stmt = $pdo->prepare("
                 SELECT * FROM `reading_history` 
-                WHERE (`user_id` = ? OR `user_token` = ?) AND `series_id` = ? 
+                WHERE `user_id` = ? AND `series_id` = ? 
                 LIMIT 1
             ");
-            $stmt->execute([$userId, $userToken, $seriesId]);
+            $stmt->execute([$userId, $seriesId]);
         } else {
             $stmt = $pdo->prepare("
                 SELECT * FROM `reading_history` 
-                WHERE `user_token` = ? AND `series_id` = ? 
+                WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` = ? 
                 LIMIT 1
             ");
             $stmt->execute([$userToken, $seriesId]);
@@ -123,18 +123,17 @@ if ($action === 'list') {
         if ($userId) {
             $stmt = $pdo->prepare("
                 SELECT * FROM `reading_history` 
-                WHERE `user_id` = ? OR `user_token` = ?
+                WHERE `user_id` = ?
                 ORDER BY `updated_at` DESC 
                 LIMIT ?
             ");
             $stmt->bindValue(1, $userId, PDO::PARAM_INT);
-            $stmt->bindValue(2, $userToken, PDO::PARAM_STR);
-            $stmt->bindValue(3, $limit, PDO::PARAM_INT);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
             $stmt->execute();
         } else {
             $stmt = $pdo->prepare("
                 SELECT * FROM `reading_history` 
-                WHERE `user_token` = ?
+                WHERE `user_token` = ? AND `user_id` IS NULL
                 ORDER BY `updated_at` DESC 
                 LIMIT ?
             ");
@@ -156,10 +155,10 @@ if ($action === 'remove') {
     if (!empty($seriesId)) {
         try {
             if ($userId) {
-                $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE (`user_id` = ? OR `user_token` = ?) AND `series_id` = ?");
-                $stmt->execute([$userId, $userToken, $seriesId]);
+                $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_id` = ? AND `series_id` = ?");
+                $stmt->execute([$userId, $seriesId]);
             } else {
-                $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_token` = ? AND `series_id` = ?");
+                $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` = ?");
                 $stmt->execute([$userToken, $seriesId]);
             }
             echo json_encode(['success' => true]);
@@ -173,10 +172,10 @@ if ($action === 'remove') {
 if ($action === 'clear') {
     try {
         if ($userId) {
-            $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_id` = ? OR `user_token` = ?");
-            $stmt->execute([$userId, $userToken]);
+            $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_id` = ?");
+            $stmt->execute([$userId]);
         } else {
-            $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_token` = ?");
+            $stmt = $pdo->prepare("DELETE FROM `reading_history` WHERE `user_token` = ? AND `user_id` IS NULL");
             $stmt->execute([$userToken]);
         }
         echo json_encode(['success' => true]);

@@ -16,6 +16,7 @@ if (ini_get("session.use_cookies")) {
         $params["secure"], $params["httponly"]
     );
 }
+setcookie('guest_reader_token', '', time() - 3600, '/');
 session_destroy();
 
 header("Location: " . BASE_URL);

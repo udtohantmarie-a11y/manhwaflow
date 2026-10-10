@@ -53,18 +53,11 @@ function getPageUrl($p, $search, $genreSlug, $typeFilter = '', $sourceFilter = '
 }
 
 require_once __DIR__ . '/includes/chapters_fallback.php';
-$athreaSpotlight = ChaptersFallback::getAthreaDirectory(12);
+$featuredSpotlight = ChaptersFallback::getExclusiveSpotlight(12);
 
 // Fetch items directly from real-time library with pagination
 $pagedResult = [];
-if ($sourceFilter === 'athrea') {
-    $athreaList = ChaptersFallback::getAthreaDirectory(35);
-    $pagedResult = [
-        'items' => $athreaList,
-        'total' => count($athreaList),
-        'total_pages' => 1
-    ];
-} elseif (!empty($search)) {
+if (!empty($search)) {
     $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, $typeFilter);
 } elseif (!empty($genreSlug)) {
     $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page, $typeFilter);
@@ -76,18 +69,31 @@ $displayItems = $pagedResult['items'] ?? [];
 $totalItems = $pagedResult['total'] ?? count($displayItems);
 $totalPages = $pagedResult['total_pages'] ?? 1;
 
-// Fetch recent reading history for "Continue Reading" bar
-$userToken = !empty($_SESSION['user_id']) ? 'user_' . $_SESSION['user_id'] : ($_COOKIE['guest_reader_token'] ?? '');
+// Fetch recent reading history for "Continue Reading" bar (strictly isolated per user/guest)
+$userId = $_SESSION['user_id'] ?? null;
+$guestToken = $_COOKIE['guest_reader_token'] ?? '';
 $recentHistory = [];
-if (!empty($userToken)) {
+
+if ($userId) {
     try {
         $stmtH = $pdo->prepare("
             SELECT * FROM `reading_history` 
-            WHERE (`user_id` = ? OR `user_token` = ?) 
+            WHERE `user_id` = ? 
             ORDER BY `updated_at` DESC 
             LIMIT 6
         ");
-        $stmtH->execute([$_SESSION['user_id'] ?? null, $userToken]);
+        $stmtH->execute([$userId]);
+        $recentHistory = $stmtH->fetchAll();
+    } catch (PDOException $e) {}
+} elseif (!empty($guestToken)) {
+    try {
+        $stmtH = $pdo->prepare("
+            SELECT * FROM `reading_history` 
+            WHERE `user_token` = ? AND `user_id` IS NULL 
+            ORDER BY `updated_at` DESC 
+            LIMIT 6
+        ");
+        $stmtH->execute([$guestToken]);
         $recentHistory = $stmtH->fetchAll();
     } catch (PDOException $e) {}
 }
@@ -257,17 +263,12 @@ require_once __DIR__ . '/includes/header.php';
         <!-- Genre Filter Pills -->
         <div class="space-y-2">
             <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre &amp; Sources
+                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre
             </h2>
             <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
                 <a href="<?= getPageUrl(1, $search, '', $typeFilter, '') ?>" 
                    class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= empty($genreSlug) && empty($sourceFilter) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
                     All Genres
-                </a>
-                <a href="<?= getPageUrl(1, '', '', '', $sourceFilter === 'athrea' ? '' : 'athrea') ?>" 
-                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 <?= $sourceFilter === 'athrea' ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md shadow-pink-900/40 ring-2 ring-pink-400/50' : 'bg-pink-950/40 hover:bg-pink-900/40 text-pink-300 border border-pink-500/40' ?>">
-                    <span>🌸 Athrea Scans</span>
-                    <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-200">Romance</span>
                 </a>
                 <?php foreach ($genres as $g): ?>
                     <a href="<?= getPageUrl(1, $search, $g['slug'], $typeFilter, '') ?>" 
@@ -279,35 +280,32 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </section>
 
-    <!-- ATHREA SCANS EXCLUSIVE SHOWCASE (Featured on default Homepage view) -->
-    <?php if (empty($search) && empty($genreSlug) && empty($sourceFilter) && empty($typeFilter) && $page === 1 && !empty($athreaSpotlight)): ?>
+    <!-- FEATURED WEBTOONS & TRENDING HITS (Curated full-chapter manhwa & webtoons) -->
+    <?php if (empty($search) && empty($genreSlug) && empty($sourceFilter) && empty($typeFilter) && $page === 1 && !empty($featuredSpotlight)): ?>
     <section class="space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-dark-800">
             <div>
                 <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-                    <span class="w-2.5 h-6 rounded-full bg-pink-500"></span>
-                    <span>🌸 Athrea Scans Collection</span>
-                    <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 uppercase tracking-wider">Top Romance &amp; Shoujo</span>
+                    <span class="w-2.5 h-6 rounded-full bg-gradient-to-b from-brand-500 to-indigo-500"></span>
+                    <span>✨ Featured Webtoons &amp; Trending Hits</span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30 uppercase tracking-wider">Top Rated</span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-0.5">High-definition romance &amp; drama webtoons direct from Athrea Scans.</p>
+                <p class="text-xs text-slate-400 mt-0.5">Popular full-chapter webtoons with high-definition reader experience.</p>
             </div>
-            <a href="<?= BASE_URL ?>index.php?source=athrea" class="text-xs font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1.5 transition-colors self-start sm:self-auto bg-pink-950/40 px-3 py-1.5 rounded-xl border border-pink-500/30 hover:border-pink-500/60">
-                <span>View Full Athrea Catalog</span>
-                <i class="fa-solid fa-arrow-right text-[10px]"></i>
-            </a>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-            <?php foreach (array_slice($athreaSpotlight, 0, 6) as $ath): ?>
+            <?php foreach (array_slice($featuredSpotlight, 0, 12) as $spot): ?>
                 <?php 
-                    $cardUrl = BASE_URL . "manhwa.php?md_id=" . urlencode($ath['id']);
-                    $coverUrl = $ath['cover_url'];
-                    if (str_contains($coverUrl, 'athreascans.com')) {
+                    $cardUrl = BASE_URL . "manhwa.php?id=" . urlencode($spot['id']);
+                    $coverUrl = $spot['cover_url'];
+                    if (str_contains($coverUrl, 'athreascans.com') || str_contains($coverUrl, 'anisascans.in')) {
                         $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
                     }
-                    $title = $ath['title'];
+                    $title = $spot['title'];
+                    $genreLabel = !empty($spot['tags']) ? implode(' &bull; ', array_slice($spot['tags'], 0, 2)) : 'Webtoon';
                 ?>
-                <div class="group flex flex-col bg-dark-900 rounded-xl overflow-hidden border border-dark-800/80 hover:border-pink-500/60 shadow-lg hover:shadow-pink-900/20 transition-all duration-300">
+                <div class="group flex flex-col bg-dark-900 rounded-xl overflow-hidden border border-dark-800/80 hover:border-brand-500/60 shadow-lg hover:shadow-brand-900/20 transition-all duration-300">
                     <a href="<?= $cardUrl ?>" class="relative aspect-[2/3] overflow-hidden bg-dark-950 block">
                         <img src="<?= htmlspecialchars($coverUrl) ?>" 
                              alt="<?= htmlspecialchars($title) ?>" 
@@ -316,28 +314,28 @@ require_once __DIR__ . '/includes/header.php';
                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                         <div class="absolute top-2 left-2 flex flex-col gap-1">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/75 backdrop-blur-md text-amber-400 border border-white/10 flex items-center gap-1">
-                                <i class="fa-solid fa-star text-[9px]"></i> <?= htmlspecialchars($ath['rating']) ?>
+                                <i class="fa-solid fa-star text-[9px]"></i> <?= htmlspecialchars($spot['rating']) ?>
                             </span>
                         </div>
                         <div class="absolute top-2 right-2 flex flex-col gap-1">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-pink-600 text-white shadow-sm backdrop-blur-md border border-white/10">
-                                Athrea
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-brand-600 text-white shadow-sm backdrop-blur-md border border-white/10">
+                                <?= htmlspecialchars($spot['type'] ?? 'Manhwa') ?>
                             </span>
                         </div>
                         <div class="absolute bottom-2 right-2">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-dark-900/90 backdrop-blur-md text-slate-200 border border-dark-700">
-                                <?= htmlspecialchars($ath['latest_chapter']) ?>
+                                <?= htmlspecialchars($spot['latest_chapter']) ?>
                             </span>
                         </div>
                     </a>
                     <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
                         <div>
-                            <h3 class="font-bold text-sm text-slate-100 group-hover:text-pink-400 transition-colors line-clamp-1" title="<?= htmlspecialchars($title) ?>">
+                            <h3 class="font-bold text-sm text-slate-100 group-hover:text-brand-400 transition-colors line-clamp-1" title="<?= htmlspecialchars($title) ?>">
                                 <a href="<?= $cardUrl ?>"><?= htmlspecialchars($title) ?></a>
                             </h3>
-                            <p class="text-[11px] text-pink-400/80 font-medium line-clamp-1 mt-0.5">Romance &bull; Drama</p>
+                            <p class="text-[11px] text-slate-400 font-medium line-clamp-1 mt-0.5"><?= $genreLabel ?></p>
                         </div>
-                        <a href="<?= $cardUrl ?>" class="w-full py-1.5 px-3 rounded-lg bg-pink-600/20 hover:bg-pink-600 text-pink-300 hover:text-white border border-pink-500/30 text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 shadow-sm">
+                        <a href="<?= $cardUrl ?>" class="w-full py-1.5 px-3 rounded-lg bg-brand-600/20 hover:bg-brand-600 text-brand-300 hover:text-white border border-brand-500/30 text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 shadow-sm">
                             <i class="fa-solid fa-book-open text-[10px]"></i> Read Series
                         </a>
                     </div>
@@ -355,10 +353,8 @@ require_once __DIR__ . '/includes/header.php';
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-dark-800">
             <div>
                 <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-                    <span class="w-2.5 h-6 rounded-full <?= $sourceFilter === 'athrea' ? 'bg-pink-500' : 'bg-brand-500' ?>"></span>
-                    <?php if ($sourceFilter === 'athrea'): ?>
-                        <span class="text-pink-400">🌸 Athrea Scans Collection</span> &bull; Romance &amp; Shoujo
-                    <?php elseif (!empty($search)): ?>
+                    <span class="w-2.5 h-6 rounded-full bg-brand-500"></span>
+                    <?php if (!empty($search)): ?>
                         Search Results for: "<span class="text-brand-400"><?= htmlspecialchars($search) ?></span>"
                     <?php elseif (!empty($genreSlug)): ?>
                         Genre: <span class="text-brand-400"><?= htmlspecialchars(ucwords(str_replace('-', ' ', $genreSlug))) ?></span>
@@ -536,56 +532,11 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <script>
-// Hydrate Continue Reading section from LocalStorage if not rendered by PHP
-(function() {
-    try {
-        const sec = document.getElementById('continue-reading-section');
-        const list = document.getElementById('continue-reading-list');
-        if (!sec || !list) return;
-
-        const allHist = JSON.parse(localStorage.getItem('manhwaflow_history') || localStorage.getItem('manhwaverse_history') || '{}');
-        const items = Object.values(allHist);
-        if (items.length === 0) return;
-
-        // Sort descending by updated_at
-        items.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
-
-        let added = 0;
-        items.slice(0, 6).forEach(item => {
-            if (list.querySelector(`[data-series="${item.series_id}"]`)) return;
-
-            const card = document.createElement('div');
-            card.className = 'continue-reading-card bg-dark-900 border border-dark-800 hover:border-emerald-500/50 rounded-xl p-3 flex gap-3 items-center group transition-all shadow-md hover:shadow-emerald-950/20';
-            card.setAttribute('data-series', item.series_id);
-            card.innerHTML = `
-                <a href="${item.read_url}" class="shrink-0 block">
-                    <img src="${item.cover_image}" alt="${item.series_title}" class="w-12 h-16 rounded-lg object-cover border border-dark-750 group-hover:scale-105 transition-transform duration-200">
-                </a>
-                <div class="flex-1 min-w-0 space-y-1">
-                    <h4 class="text-xs font-bold text-slate-100 group-hover:text-emerald-400 transition-colors truncate" title="${item.series_title}">
-                        <a href="${item.read_url}">
-                            ${item.series_title}
-                        </a>
-                    </h4>
-                    <div class="flex items-center gap-1.5">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            Ch. ${item.chapter_number}
-                        </span>
-                    </div>
-                    <a href="${item.read_url}" class="inline-flex items-center gap-1 text-[11px] text-brand-400 hover:text-white font-semibold transition-colors mt-0.5">
-                        <i class="fa-solid fa-play text-[9px]"></i> Resume
-                    </a>
-                </div>
-            `;
-            list.appendChild(card);
-            added++;
-        });
-
-        if (list.children.length > 0) {
-            sec.classList.remove('hidden');
-        }
-    } catch(e) {}
-})();
+// Clean up any stale legacy localStorage history to prevent cross-account display leaks
+try {
+    localStorage.removeItem('manhwaflow_history');
+    localStorage.removeItem('manhwaverse_history');
+} catch(e) {}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

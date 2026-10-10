@@ -27,7 +27,29 @@ if ($isLive) {
 
         $manga = [
             'id' => $mdMangaId,
-            'title' => $mangaDetails['title'] ?? 'Athrea Series',
+            'title' => $mangaDetails['title'] ?? 'Webtoon Series',
+            'cover_url' => $mangaDetails['cover_url'] ?? ''
+        ];
+    } elseif (str_starts_with($mdMangaId, 'asura_')) {
+        require_once __DIR__ . '/includes/chapters_fallback.php';
+        $asuraSlug = substr($mdMangaId, 6);
+        $mangaDetails = ChaptersFallback::getAsuraDetails($asuraSlug);
+        $liveChapters = ChaptersFallback::getAsuraChapters($asuraSlug, 1000);
+
+        $manga = [
+            'id' => $mdMangaId,
+            'title' => $mangaDetails['title'] ?? 'Webtoon Series',
+            'cover_url' => $mangaDetails['cover_url'] ?? ''
+        ];
+    } elseif (str_starts_with($mdMangaId, 'anisa_')) {
+        require_once __DIR__ . '/includes/chapters_fallback.php';
+        $anisaSlug = substr($mdMangaId, 6);
+        $mangaDetails = ChaptersFallback::getAnisaDetails($anisaSlug);
+        $liveChapters = ChaptersFallback::getAnisaChapters($anisaSlug, 1000);
+
+        $manga = [
+            'id' => $mdMangaId,
+            'title' => $mangaDetails['title'] ?? 'Webtoon Series',
             'cover_url' => $mangaDetails['cover_url'] ?? ''
         ];
     } else {
@@ -81,7 +103,7 @@ if ($isLive) {
     $pageUrls = MangaDexAPI::getChapterPagesLive($mdChapterId, true);
     foreach ($pageUrls as $pIndex => $pUrl) {
         $imgSrc = $pUrl;
-        if (strpos($pUrl, 'mangadex.network') !== false || strpos($pUrl, 'mangadex.org') !== false || strpos($pUrl, 'athreascans.com') !== false || strpos($pUrl, 'anisascans.in') !== false) {
+        if (strpos($pUrl, 'mangadex.network') !== false || strpos($pUrl, 'mangadex.org') !== false || strpos($pUrl, 'athreascans.com') !== false || strpos($pUrl, 'anisascans.in') !== false || strpos($pUrl, 'mgread.io') !== false || strpos($pUrl, 'asurascans.com') !== false) {
             $imgSrc = BASE_URL . 'api/image_proxy.php?url=' . urlencode($pUrl);
         }
         $pages[] = [
@@ -933,27 +955,7 @@ async function likeComment(commentId, btnEl) {
     } catch (err) {}
 }
 
-// ==========================================
-// 7. Reading History Sync (LocalStorage & Position)
-// ==========================================
-(function() {
-    try {
-        const histData = {
-            series_id: <?= json_encode(strval($chapter['manhwa_id'])) ?>,
-            series_title: <?= json_encode($chapter['manhwa_title']) ?>,
-            cover_image: <?= json_encode($chapter['cover_image']) ?>,
-            chapter_id: <?= json_encode(strval($chapter['id'])) ?>,
-            chapter_number: <?= json_encode(floatval($chapter['chapter_number'])) ?>,
-            chapter_title: <?= json_encode($chapter['title'] ?: ('Chapter ' . $chapter['chapter_number'])) ?>,
-            read_url: window.location.href,
-            scroll_percent: 0,
-            updated_at: Date.now()
-        };
-        const allHist = JSON.parse(localStorage.getItem('manhwaflow_history') || localStorage.getItem('manhwaverse_history') || '{}');
-        allHist[histData.series_id] = histData;
-        localStorage.setItem('manhwaflow_history', JSON.stringify(allHist));
-    } catch(e) {}
-})();
+// Reading history is automatically securely saved to the database per user session above.
 
 // ==========================================
 // 8. Auto-claim Chapter Reading Flow Coins (On Reading Completion)

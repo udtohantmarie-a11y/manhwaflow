@@ -10,30 +10,31 @@ if (session_status() === PHP_SESSION_NONE) {
 $page_title = 'Reading History';
 require_once __DIR__ . '/includes/header.php';
 
-// Fetch history from database
+// Fetch history strictly isolated for this user or guest session
 $userId = $_SESSION['user_id'] ?? null;
-$userToken = !empty($userId) ? 'user_' . $userId : ($_COOKIE['guest_reader_token'] ?? '');
+$guestCookie = $_COOKIE['guest_reader_token'] ?? '';
 
 $historyItems = [];
-if (!empty($userToken)) {
+if ($userId) {
     try {
-        if ($userId) {
-            $stmt = $pdo->prepare("
-                SELECT * FROM `reading_history` 
-                WHERE `user_id` = ? OR `user_token` = ? 
-                ORDER BY `updated_at` DESC 
-                LIMIT 50
-            ");
-            $stmt->execute([$userId, $userToken]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT * FROM `reading_history` 
-                WHERE `user_token` = ? 
-                ORDER BY `updated_at` DESC 
-                LIMIT 50
-            ");
-            $stmt->execute([$userToken]);
-        }
+        $stmt = $pdo->prepare("
+            SELECT * FROM `reading_history` 
+            WHERE `user_id` = ? 
+            ORDER BY `updated_at` DESC 
+            LIMIT 50
+        ");
+        $stmt->execute([$userId]);
+        $historyItems = $stmt->fetchAll();
+    } catch (PDOException $e) {}
+} elseif (!empty($guestCookie)) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM `reading_history` 
+            WHERE `user_token` = ? AND `user_id` IS NULL 
+            ORDER BY `updated_at` DESC 
+            LIMIT 50
+        ");
+        $stmt->execute([$guestCookie]);
         $historyItems = $stmt->fetchAll();
     } catch (PDOException $e) {}
 }
@@ -203,58 +204,11 @@ function checkEmptyState() {
     }
 }
 
-// Client-side LocalStorage Hydration (in case user read as guest on another session)
-(function() {
-    try {
-        const allHist = JSON.parse(localStorage.getItem('manhwaflow_history') || localStorage.getItem('manhwaverse_history') || '{}');
-        const items = Object.values(allHist);
-        if (items.length === 0) return;
-
-        const grid = document.getElementById('history-grid');
-        if (!grid) return;
-
-        items.forEach(item => {
-            // If already present in grid, skip
-            if (grid.querySelector(`[data-series="${item.series_id}"]`)) return;
-
-            const card = document.createElement('div');
-            card.className = 'history-card bg-dark-900 border border-dark-800/80 hover:border-emerald-500/50 rounded-2xl p-4 flex gap-4 items-start group transition-all shadow-lg hover:shadow-emerald-950/20';
-            card.setAttribute('data-series', item.series_id);
-            card.innerHTML = `
-                <a href="${item.read_url}" class="w-20 aspect-[2/3] rounded-xl overflow-hidden bg-dark-950 shrink-0 border border-dark-750 block">
-                    <img src="${item.cover_image}" alt="${item.series_title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                </a>
-                <div class="flex-1 min-w-0 flex flex-col justify-between h-full space-y-2">
-                    <div>
-                        <div class="flex items-start justify-between gap-1">
-                            <h3 class="font-bold text-sm text-white group-hover:text-emerald-400 transition-colors line-clamp-2" title="${item.series_title}">
-                                <a href="<?= BASE_URL ?>manhwa.php?md_id=${item.series_id}">
-                                    ${item.series_title}
-                                </a>
-                            </h3>
-                            <button onclick="removeHistoryItem('${item.series_id}', this)" class="text-slate-500 hover:text-rose-400 p-1 text-xs transition-colors shrink-0">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </div>
-                        <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                Stopped at Ch. ${item.chapter_number}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="pt-1">
-                        <a href="${item.read_url}" class="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs text-center transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/30">
-                            <i class="fa-solid fa-play text-[10px]"></i> Resume Reading
-                        </a>
-                    </div>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-
-        checkEmptyState();
-    } catch(e) {}
-})();
+// Legacy localStorage cleanup to ensure privacy
+try {
+    localStorage.removeItem('manhwaflow_history');
+    localStorage.removeItem('manhwaverse_history');
+} catch(e) {}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
