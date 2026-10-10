@@ -7,10 +7,77 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+$userId = $_SESSION['user_id'] ?? null;
+$redeemAlert = null;
+
+// Server-side Direct POST Redeem Handler (Bypasses InfinityFree aes.js AJAX bot barrier)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'redeem_code') {
+    $inputCode = strtoupper(trim($_POST['code'] ?? ''));
+    if (!$userId) {
+        $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to redeem promo codes!'];
+    } elseif (empty($inputCode)) {
+        $redeemAlert = ['type' => 'rose', 'message' => 'Mangyaring maglagay ng redeem code (Please enter a redeem code).'];
+    } else {
+        require_once __DIR__ . '/api/rewards.php';
+        ensureRedeemInfrastructure($pdo);
+
+        try {
+            $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
+            $cStmt->execute([$inputCode]);
+            $codeRow = $cStmt->fetch();
+
+            if (!$codeRow) {
+                $redeemAlert = [
+                    'type' => 'rose',
+                    'message' => 'Invalid or unknown redeem code. I-follow ang aming official Facebook page para sa mga active promo codes!'
+                ];
+            } elseif (!empty($codeRow['expires_at']) && strtotime($codeRow['expires_at']) < time()) {
+                $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has expired. Check our Facebook page for new monthly codes!'];
+            } elseif (intval($codeRow['max_uses']) > 0 && intval($codeRow['used_count']) >= intval($codeRow['max_uses'])) {
+                $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has reached its maximum claim limit.'];
+            } else {
+                // Check if user already claimed
+                $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
+                $checkUsed->execute([$userId, $codeRow['id']]);
+                if ($checkUsed->fetch()) {
+                    $redeemAlert = ['type' => 'amber', 'message' => 'Na-redeem mo na ang code na ito! (You have already claimed this promo code).' ];
+                } else {
+                    $rewardCoins = intval($codeRow['coins']);
+                    $pdo->beginTransaction();
+
+                    $insRedeem = $pdo->prepare("INSERT INTO `user_redeemed_codes` (`user_id`, `code_id`, `coins_awarded`) VALUES (?, ?, ?)");
+                    $insRedeem->execute([$userId, $codeRow['id'], $rewardCoins]);
+
+                    $upCode = $pdo->prepare("UPDATE `redeem_codes` SET `used_count` = `used_count` + 1 WHERE `id` = ?");
+                    $upCode->execute([$codeRow['id']]);
+
+                    $upUser = $pdo->prepare("UPDATE `user_rewards` SET `coins` = `coins` + ?, `total_earned` = `total_earned` + ? WHERE `user_id` = ?");
+                    $upUser->execute([$rewardCoins, $rewardCoins, $userId]);
+
+                    try {
+                        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
+                        $log->execute([$userId, $rewardCoins, "Redeemed promo code: {$inputCode}"]);
+                    } catch (Exception $eLog) {}
+
+                    $pdo->commit();
+
+                    $redeemAlert = [
+                        'type' => 'emerald',
+                        'message' => "🎉 Tagumpay! Nakuha mo ang +{$rewardCoins} Flow Coins mula sa code na {$inputCode}!"
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $redeemAlert = ['type' => 'rose', 'message' => 'Hindi ma-proseso ang redeem code: ' . $e->getMessage()];
+        }
+    }
+}
+
 $page_title = 'Rewards Hub & GCash Redeem';
 require_once __DIR__ . '/includes/header.php';
-
-$userId = $_SESSION['user_id'] ?? null;
 $userRewards = null;
 $payoutHistory = [];
 
@@ -59,6 +126,19 @@ $rankData = calcRank($totalEarned);
 ?>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+
+    <!-- Global Flash Notification for Redeem Alert -->
+    <?php if ($redeemAlert): ?>
+        <div class="p-4 rounded-2xl bg-<?= $redeemAlert['type'] ?>-500/15 border border-<?= $redeemAlert['type'] ?>-500/40 text-<?= $redeemAlert['type'] ?>-300 text-xs sm:text-sm font-bold flex items-center justify-between gap-3 shadow-2xl animate-fadeIn">
+            <div class="flex items-center gap-2.5">
+                <i class="fa-solid <?= $redeemAlert['type'] === 'emerald' ? 'fa-circle-check text-base text-emerald-400' : 'fa-circle-exclamation text-base text-rose-400' ?>"></i>
+                <span><?= htmlspecialchars($redeemAlert['message']) ?></span>
+            </div>
+            <button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    <?php endif; ?>
 
     <!-- Header Banner -->
     <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-900 via-indigo-900 to-dark-900 border border-brand-500/30 p-6 sm:p-10 shadow-2xl">
@@ -392,9 +472,17 @@ $rankData = calcRank($totalEarned);
                 </div>
                 
                 <?php if ($userId): ?>
-                    <form onsubmit="submitRedeemCode(event)" class="space-y-3">
+                    <?php if ($redeemAlert): ?>
+                        <div class="p-3 rounded-xl bg-<?= $redeemAlert['type'] ?>-500/10 border border-<?= $redeemAlert['type'] ?>-500/30 text-<?= $redeemAlert['type'] ?>-400 text-xs font-bold flex items-center gap-2">
+                            <i class="fa-solid <?= $redeemAlert['type'] === 'emerald' ? 'fa-circle-check text-emerald-400' : 'fa-circle-exclamation text-rose-400' ?>"></i>
+                            <span><?= htmlspecialchars($redeemAlert['message']) ?></span>
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="POST" action="<?= BASE_URL ?>rewards.php" class="space-y-3">
+                        <input type="hidden" name="action" value="redeem_code">
                         <div class="relative">
-                            <input type="text" id="redeem-input-code" required placeholder="e.g. FLOW2026, MANHWAFACEBOOK"
+                            <input type="text" name="code" id="redeem-input-code" required placeholder="e.g. FLOW2026, MANHWAFACEBOOK"
                                    class="w-full bg-dark-850 border border-dark-700 focus:border-brand-500 rounded-xl px-4 py-3 text-xs sm:text-sm text-white font-mono tracking-wider uppercase focus:outline-none placeholder:text-slate-600 placeholder:normal-case">
                         </div>
                         <button type="submit" id="btn-submit-code"
@@ -725,51 +813,19 @@ async function watchDailyAd() {
     }
 }
 
-// 2. Submit Monthly Redeem Code
-async function submitRedeemCode(e) {
-    e.preventDefault();
-    const input = document.getElementById('redeem-input-code');
-    const btn = document.getElementById('btn-submit-code');
-    if (!input || !input.value.trim()) return;
-
-    const code = input.value.trim().toUpperCase();
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Checking Code...';
-    }
-
-    try {
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=redeem_code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code })
+// 2. Submit Monthly Redeem Code (Native POST with loading feedback)
+document.addEventListener('DOMContentLoaded', function() {
+    const redeemForm = document.querySelector('form[action*="rewards.php"] input[name="action"][value="redeem_code"]')?.closest('form');
+    if (redeemForm) {
+        redeemForm.addEventListener('submit', function() {
+            const btn = document.getElementById('btn-submit-code');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Processing Code...';
+            }
         });
-        
-        const rawText = await res.text();
-        let data;
-        try {
-            data = JSON.parse(rawText);
-        } catch(pErr) {
-            console.error('Non-JSON server response:', rawText);
-            const cleanErr = rawText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 150);
-            alert('Server response: ' + (cleanErr || 'Could not parse response.'));
-            return;
-        }
-
-        alert(data.message || (data.success ? 'Code successfully redeemed!' : 'Could not process redeem code.'));
-        if (data.success) {
-            window.location.reload();
-        }
-    } catch(err) {
-        console.error(err);
-        alert('Could not process redeem code. Please check your internet connection and try again.');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-gift"></i> <span>Redeem Bonus Coins</span>';
-        }
     }
-}
+});
 
 // Check-In API call
 async function claimCheckin() {

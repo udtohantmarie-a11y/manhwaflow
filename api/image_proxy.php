@@ -30,7 +30,10 @@ $allowedHosts = [
     'uploads.mangadex.org',
     'api.mangadex.org',
     'temp.compsci88.com',
-    'asurascans.com'
+    'asurascans.com',
+    'anisascans.in',
+    'mgread.io',
+    'like.mgread.io'
 ];
 
 foreach ($allowedHosts as $allowed) {

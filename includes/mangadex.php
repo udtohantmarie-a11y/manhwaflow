@@ -479,13 +479,14 @@ class MangaDexAPI {
             ];
         }
 
-        // When to check secondary provider:
+        // When to check secondary provider (WeebCentral, Asura Scans, Anisa Scans):
         // 1. MangaDex has 0 hosted chapters (DMCA removed or only external links)
-        // 2. MangaDex has severe missing gaps in long-running series (e.g. max chapter >= 30 but missing > 60% of chapters)
-        $hasMissingGap = ($maxChapterNum >= 30 && $hostedCount < ($maxChapterNum * 0.4));
-        if ($hostedCount === 0 || $hasMissingGap) {
+        // 2. MangaDex has missing/incomplete chapters (< 15 chapters, or missing > 15% of max chapter)
+        // 3. Series already has an established fallback mapping
+        $isSparse = ($hostedCount === 0 || $hostedCount < 15 || ($maxChapterNum > 0 && $hostedCount < ($maxChapterNum * 0.85)));
+        if ($isSparse || $existingMapping) {
             $fallbackList = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle);
-            if (!empty($fallbackList) && count($fallbackList) > $hostedCount) {
+            if (!empty($fallbackList) && ($hostedCount === 0 || count($fallbackList) > $hostedCount)) {
                 return $fallbackList;
             }
         }
@@ -501,7 +502,7 @@ class MangaDexAPI {
      * Get Chapter Pages Live via @Home CDN or Secondary Fallback Provider
      */
     public static function getChapterPagesLive($chapterId, $dataSaver = true) {
-        if (str_starts_with($chapterId, 'asura_') || str_starts_with($chapterId, 'wc_')) {
+        if (str_starts_with($chapterId, 'asura_') || str_starts_with($chapterId, 'wc_') || str_starts_with($chapterId, 'anisa_')) {
             require_once __DIR__ . '/chapters_fallback.php';
             return ChaptersFallback::getPages($chapterId);
         }

@@ -4,6 +4,7 @@
 class ChaptersFallback {
     const ASURA_BASE = 'https://asurascans.com';
     const WC_BASE = 'https://weebcentral.com';
+    const ANISA_BASE = 'https://anisascans.in';
     const CACHE_DIR = __DIR__ . '/../cache';
 
     // Direct Pre-mappings for Asura Scans (Murim & Hot Action scanlations)
@@ -64,14 +65,16 @@ class ChaptersFallback {
     }
 
     /**
-     * Strict Title Matcher - Checks if candidate series title matches target title
+     * Accurate Title Matcher - Checks if candidate series title matches target title
      */
     public static function isTitleMatch($title1, $title2) {
         if (empty($title1) || empty($title2)) return false;
 
-        // Strip hash suffixes (e.g. Asura -bd5bdaf8) and extra whitespace
-        $clean1 = preg_replace('/-[a-f0-9]{8}$/i', '', $title1);
-        $clean2 = preg_replace('/-[a-f0-9]{8}$/i', '', $title2);
+        // Clean hash suffixes, brackets, and extra whitespace
+        $clean1 = preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title1);
+        $clean2 = preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title2);
+        $clean1 = preg_replace('/-[a-f0-9]{8}$/i', '', $clean1);
+        $clean2 = preg_replace('/-[a-f0-9]{8}$/i', '', $clean2);
 
         $norm1 = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $clean1)));
         $norm2 = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '', $clean2)));
@@ -79,15 +82,37 @@ class ChaptersFallback {
         if (empty($norm1) || empty($norm2)) return false;
         if ($norm1 === $norm2) return true;
 
-        // Containment check with high length ratio
+        // Significant words overlap check
+        $stopWords = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'with', 'on', 'at', 'from', 'by', 'season', 'manhwa', 'comic', 'webtoon'];
+        $words1 = array_values(array_filter(explode(' ', strtolower(preg_replace('/[^a-z0-9]+/i', ' ', $clean1))), fn($w) => strlen($w) > 1 && !in_array($w, $stopWords)));
+        $words2 = array_values(array_filter(explode(' ', strtolower(preg_replace('/[^a-z0-9]+/i', ' ', $clean2))), fn($w) => strlen($w) > 1 && !in_array($w, $stopWords)));
+
+        if (!empty($words1) && !empty($words2)) {
+            if (count($words1) === 1 || count($words2) === 1) {
+                return ($norm1 === $norm2);
+            }
+
+            $common = array_intersect($words1, $words2);
+            $commonCount = count($common);
+            $minWordCount = min(count($words1), count($words2));
+            $maxWordCount = max(count($words1), count($words2));
+
+            if ($commonCount >= 2 && ($commonCount / $minWordCount) >= 0.75) {
+                if ($minWordCount / $maxWordCount >= 0.5) {
+                    return true;
+                }
+            }
+        }
+
+        // Exact containment with length ratio
         if (str_contains($norm1, $norm2) || str_contains($norm2, $norm1)) {
             $minLen = min(strlen($norm1), strlen($norm2));
             $maxLen = max(strlen($norm1), strlen($norm2));
-            if ($minLen / $maxLen >= 0.75) return true;
+            if ($minLen / $maxLen >= 0.70) return true;
         }
 
         similar_text($norm1, $norm2, $pct);
-        return $pct >= 75;
+        return $pct >= 78;
     }
 
     /**
@@ -117,31 +142,23 @@ class ChaptersFallback {
         // 1. Check existing pre-map or cached dynamic mapping
         $mapping = self::getMapping($mangaId);
         if ($mapping) {
-            // Defensive Check: If dynamic mapping, ensure it does not contradict $mangaTitle
-            if (!empty($mangaTitle) && !isset(self::$weebCentralMap[$mangaId]) && !isset(self::$asuraMap[$mangaId])) {
-                if ($mapping['type'] === 'asura' && !self::isTitleMatch($mangaTitle, $mapping['id'])) {
-                    self::deleteMapping($mangaId);
-                    $mapping = null;
-                }
-            }
-
-            if ($mapping) {
-                if ($mapping['type'] === 'wc') {
-                    $chList = self::getWeebCentralChapters($mapping['id'], $limit);
-                    if (!empty($chList)) return $chList;
-                } elseif ($mapping['type'] === 'asura') {
-                    $chList = self::getAsuraChapters($mapping['id'], $limit);
-                    if (!empty($chList)) return $chList;
-                }
+            if ($mapping['type'] === 'wc') {
+                $chList = self::getWeebCentralChapters($mapping['id'], $limit);
+                if (!empty($chList)) return $chList;
+            } elseif ($mapping['type'] === 'asura') {
+                $chList = self::getAsuraChapters($mapping['id'], $limit);
+                if (!empty($chList)) return $chList;
+            } elseif ($mapping['type'] === 'anisa') {
+                $chList = self::getAnisaChapters($mapping['id'], $limit);
+                if (!empty($chList)) return $chList;
             }
         }
 
-        // 2. Strict dynamic search by title if title is provided
+        // 2. Dynamic multi-source search by title if title is provided
         if (!empty($mangaTitle)) {
-            // A. Search WeebCentral
+            // A. Search WeebCentral (huge complete catalog)
             $wcId = self::searchWeebCentralId($mangaTitle);
             if (!$wcId) {
-                // Try clean title without parenthesis or punctuation
                 $cleanTitle = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $mangaTitle));
                 $cleanTitle = trim(explode(':', $cleanTitle)[0]);
                 $cleanTitle = trim(explode('-', $cleanTitle)[0]);
@@ -149,7 +166,6 @@ class ChaptersFallback {
                     $wcId = self::searchWeebCentralId($cleanTitle);
                 }
             }
-
             if ($wcId) {
                 $chapters = self::getWeebCentralChapters($wcId, $limit);
                 if (!empty($chapters)) {
@@ -158,12 +174,22 @@ class ChaptersFallback {
                 }
             }
 
-            // B. Search Asura Scans
+            // B. Search Asura Scans (Murim, Action, System)
             $asuraSlug = self::searchAsuraSlug($mangaTitle);
             if ($asuraSlug) {
                 $chapters = self::getAsuraChapters($asuraSlug, $limit);
                 if (!empty($chapters)) {
                     self::saveMapping($mangaId, 'asura', $asuraSlug);
+                    return $chapters;
+                }
+            }
+
+            // C. Search Anisa Scans (Trending Manhwa & Scanlations)
+            $anisaSlug = self::searchAnisaSlug($mangaTitle);
+            if ($anisaSlug) {
+                $chapters = self::getAnisaChapters($anisaSlug, $limit);
+                if (!empty($chapters)) {
+                    self::saveMapping($mangaId, 'anisa', $anisaSlug);
                     return $chapters;
                 }
             }
@@ -371,7 +397,160 @@ class ChaptersFallback {
     }
 
     /**
-     * Get Chapter Pages for either Asura or WeebCentral
+     * Search Anisa Scans dynamically for matching series slug
+     */
+    public static function searchAnisaSlug($title) {
+        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
+        $q = urlencode($clean);
+        $url = self::ANISA_BASE . "/?s={$q}&post_type=wp-manga";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) return null;
+
+        // Pattern 1: Madara standard search result titles
+        if (preg_match_all('/<a href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"[^>]*title="([^"]+)"/i', $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $candidateSlug = $m[1];
+                $candidateTitle = html_entity_decode(trim($m[2]), ENT_QUOTES | ENT_HTML5);
+                if (self::isTitleMatch($clean, $candidateTitle) || self::isTitleMatch($title, $candidateTitle)) {
+                    return $candidateSlug;
+                }
+            }
+        }
+
+        // Pattern 2: Any manga link in search results
+        if (preg_match_all('/href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"/i', $html, $matches2)) {
+            $slugs = array_values(array_unique($matches2[1]));
+            foreach ($slugs as $s) {
+                $slugTitle = str_replace('-', ' ', $s);
+                if (self::isTitleMatch($clean, $slugTitle) || self::isTitleMatch($title, $slugTitle)) {
+                    return $s;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch chapters from Anisa Scans (Madara theme AJAX endpoint)
+     */
+    public static function getAnisaChapters($slug, $limit = 1000) {
+        $cacheFile = self::CACHE_DIR . "/fallback_anisa_{$slug}_chapters.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return array_slice($cached, 0, $limit);
+        }
+
+        $url = self::ANISA_BASE . "/manga/{$slug}/ajax/chapters/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, '');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        preg_match_all('/href="https:\/\/anisascans\.in\/manga\/[^\/]+\/([^"\/]+)\/"[^>]*>(.*?)<\/a>/si', $html, $matches, PREG_SET_ORDER);
+        $chapters = [];
+
+        foreach ($matches as $m) {
+            $chSlug = trim($m[1]);
+            $chNum = null;
+            if (preg_match('/(?:chapter|ch)[-_]?([0-9.]+)/i', $chSlug, $cn)) {
+                $chNum = floatval($cn[1]);
+            } elseif (preg_match('/([0-9.]+)/', $chSlug, $cn)) {
+                $chNum = floatval($cn[1]);
+            }
+
+            if ($chNum === null) continue;
+
+            $key = $chNum;
+            if (!isset($chapters[$key])) {
+                $chapters[$key] = [
+                    'id' => "anisa_{$slug}_ch_{$chSlug}",
+                    'chapter_number' => $chNum,
+                    'title' => "Chapter " . $chNum,
+                    'pages' => 20,
+                    'language' => 'en',
+                    'externalUrl' => null,
+                    'created_at' => date('Y-m-d')
+                ];
+            }
+        }
+
+        ksort($chapters);
+        $list = array_values($chapters);
+        if (!empty($list)) {
+            @file_put_contents($cacheFile, json_encode($list));
+        }
+
+        return array_slice($list, 0, $limit);
+    }
+
+    /**
+     * Fetch chapter images from Anisa Scans
+     */
+    public static function getAnisaPages($slug, $chapterSlug) {
+        $cacheFile = self::CACHE_DIR . "/fallback_anisa_{$slug}_{$chapterSlug}_pages.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 86400)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::ANISA_BASE . "/manga/{$slug}/{$chapterSlug}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        preg_match_all('/<img[^>]+(?:data-src|data-full-url|src)="([^">]+)"[^>]*class="[^"]*wp-manga-chapter-img[^"]*"/i', $html, $imgMatches);
+        $rawPages = $imgMatches[1] ?? [];
+        if (empty($rawPages)) {
+            preg_match_all('/class="page-break[^"]*"[\s\S]*?<img[^>]+(?:data-src|data-full-url|src)="([^">]+)"/i', $html, $imgMatches2);
+            $rawPages = $imgMatches2[1] ?? [];
+        }
+
+        $pages = [];
+        foreach ($rawPages as $p) {
+            $cleanUrl = trim($p);
+            if (!empty($cleanUrl) && !str_contains($cleanUrl, 'logo') && !str_contains($cleanUrl, 'banner')) {
+                $pages[] = $cleanUrl;
+            }
+        }
+        $pages = array_values(array_unique($pages));
+
+        if (!empty($pages)) {
+            @file_put_contents($cacheFile, json_encode($pages));
+        }
+        return $pages;
+    }
+
+    /**
+     * Get Chapter Pages for WeebCentral, Asura Scans, or Anisa Scans
      */
     public static function getPages($chapterId) {
         if (!is_dir(self::CACHE_DIR)) {
@@ -458,6 +637,14 @@ class ChaptersFallback {
                 @file_put_contents($cacheFile, json_encode($pages));
             }
             return $pages;
+        }
+
+        // --- 3. Anisa Scans Chapter Images ---
+        if (str_starts_with($chapterId, 'anisa_')) {
+            if (preg_match('/^anisa_(.+)_ch_(.+)$/', $chapterId, $matches)) {
+                return self::getAnisaPages($matches[1], $matches[2]);
+            }
+            return [];
         }
 
         return [];
