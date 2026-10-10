@@ -249,6 +249,15 @@ require_once __DIR__ . '/includes/header.php';
     </button>
 </div>
 
+<!-- Floating Exit Fullscreen Button (Pinned during Fullscreen mode) -->
+<button id="btn-floating-exit-fullscreen" 
+        onclick="toggleFullscreen()" 
+        class="fixed top-4 right-4 z-50 px-3.5 py-2 rounded-full bg-black/85 hover:bg-black text-slate-200 hover:text-white border border-white/20 backdrop-blur-md shadow-2xl transition-all duration-300 hidden items-center gap-2 text-xs font-bold active:scale-95 group opacity-85 hover:opacity-100 cursor-pointer"
+        title="Exit Fullscreen (or press icon again)">
+    <i class="fa-solid fa-compress text-brand-400 group-hover:scale-110 transition-transform"></i>
+    <span class="text-[11px] font-semibold">Exit Fullscreen</span>
+</button>
+
 <!-- Gestures & Controls Guide Modal -->
 <div id="gesture-guide-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
     <div class="bg-dark-900 border border-dark-800 rounded-2xl max-w-sm w-full p-6 space-y-5 shadow-2xl animate-fadeIn">
@@ -276,13 +285,27 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <div class="p-3 rounded-xl bg-dark-850 border border-dark-750 flex items-start gap-3">
                 <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center shrink-0">
-                    <i class="fa-solid fa-volume-high"></i>
+                    <i class="fa-solid fa-expand"></i>
                 </div>
                 <div>
-                    <h4 class="font-bold text-white">Hardware Volume Keys</h4>
+                    <h4 class="font-bold text-white">Dedicated Fullscreen Mode</h4>
                     <p class="text-slate-400 text-[11px] mt-0.5">
-                        &bull; <strong>Volume Up:</strong> Scroll Up smoothly<br>
-                        &bull; <strong>Volume Down:</strong> Scroll Down smoothly
+                        Tap the <i class="fa-solid fa-expand text-[10px] text-brand-400"></i> icon in the menu bar to enter locked Fullscreen. To exit, simply tap the floating <strong>Exit Fullscreen</strong> button!
+                    </p>
+                </div>
+            </div>
+            <div class="p-3 rounded-xl bg-dark-850 border border-dark-750 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-keyboard"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white">Keyboard &amp; Remote Keys</h4>
+                    <p class="text-slate-400 text-[11px] mt-0.5">
+                        &bull; <strong>Arrow Up / PageUp:</strong> Scroll Up<br>
+                        &bull; <strong>Arrow Down / Space:</strong> Scroll Down<br>
+                        <span class="text-amber-400/90 text-[10px] block mt-1">
+                            *Physical phone volume keys are restricted by Android/iOS system audio. Use <strong>Screen Tap</strong> or <strong>Floating Buttons</strong> for smooth 1-hand mobile reading.
+                        </span>
                     </p>
                 </div>
             </div>
@@ -588,7 +611,12 @@ window.addEventListener('scroll', () => {
                     floatingControls.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
                 }
             } else if (currentScrollY < lastScrollY - 15 || currentScrollY <= 15) {
-                // Scrolling UP or Top -> Reveal controls smoothly
+                // Scrolling UP or Top -> Reveal controls smoothly (unless locked in Fullscreen mode)
+                if (isReaderFullscreen) {
+                    lastScrollY = Math.max(0, currentScrollY);
+                    scrollTicking = false;
+                    return;
+                }
                 if (header && isHeaderHidden) {
                     header.classList.remove('-translate-y-full', 'pointer-events-none');
                     isHeaderHidden = false;
@@ -624,59 +652,125 @@ function setReaderWidth(width, btnEl) {
 }
 
 // ==========================================
-// 3. Immersive Fullscreen (Mobile & Desktop)
+// 3. Immersive Locked Fullscreen (Mobile & Desktop)
 // ==========================================
-function toggleFullscreen() {
-    const docEl = document.documentElement;
-    const icon = document.getElementById('fullscreen-icon');
-    const isFS = document.fullscreenElement || 
-                 document.webkitFullscreenElement || 
-                 document.mozFullScreenElement || 
-                 document.msFullscreenElement;
+let isReaderFullscreen = false;
 
-    if (!isFS) {
-        if (docEl.requestFullscreen) {
-            docEl.requestFullscreen().catch(() => {});
-        } else if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-        } else if (docEl.mozRequestFullScreen) {
-            docEl.mozRequestFullScreen();
-        } else if (docEl.msRequestFullscreen) {
-            docEl.msRequestFullscreen();
+function toggleFullscreen() {
+    isReaderFullscreen = !isReaderFullscreen;
+
+    const docEl = document.documentElement;
+    const body = document.body;
+    const header = document.getElementById('reader-sticky-bar');
+    const canvas = document.getElementById('reader-canvas-wrapper');
+    const floatingBtn = document.getElementById('btn-floating-exit-fullscreen');
+    const bottomAd = document.getElementById('mf-sticky-bottom-banner');
+    const icon = document.getElementById('fullscreen-icon');
+    const isNativeFS = document.fullscreenElement || 
+                       document.webkitFullscreenElement || 
+                       document.mozFullScreenElement || 
+                       document.msFullscreenElement;
+
+    if (isReaderFullscreen) {
+        // 1. Enter Immersive UI State
+        body.classList.add('reader-fullscreen-active');
+        if (header) {
+            header.classList.add('-translate-y-full', 'pointer-events-none');
+            isHeaderHidden = true;
+        }
+        if (canvas) {
+            canvas.classList.remove('pt-[54px]', 'sm:pt-[56px]');
+            canvas.classList.add('pt-0');
+        }
+        if (floatingBtn) {
+            floatingBtn.classList.remove('hidden');
+            floatingBtn.classList.add('flex');
+        }
+        if (bottomAd) {
+            bottomAd.classList.add('hidden');
         }
         if (icon) {
             icon.classList.remove('fa-expand');
             icon.classList.add('fa-compress');
         }
+
+        // 2. Request native browser fullscreen (Android Chrome / PC)
+        if (!isNativeFS) {
+            try {
+                if (docEl.requestFullscreen) {
+                    docEl.requestFullscreen().catch(() => {});
+                } else if (docEl.webkitRequestFullscreen) {
+                    docEl.webkitRequestFullscreen();
+                } else if (docEl.mozRequestFullScreen) {
+                    docEl.mozRequestFullScreen();
+                } else if (docEl.msRequestFullscreen) {
+                    docEl.msRequestFullscreen();
+                }
+            } catch(e) {}
+        }
     } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.mozCancelFullScreen) {
-            document.mozCancelFullScreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
+        // 1. Exit Immersive UI State
+        body.classList.remove('reader-fullscreen-active');
+        if (header) {
+            header.classList.remove('-translate-y-full', 'pointer-events-none');
+            isHeaderHidden = false;
+        }
+        if (canvas) {
+            canvas.classList.remove('pt-0');
+            canvas.classList.add('pt-[54px]', 'sm:pt-[56px]');
+        }
+        if (floatingBtn) {
+            floatingBtn.classList.add('hidden');
+            floatingBtn.classList.remove('flex');
+        }
+        if (bottomAd && sessionStorage.getItem('mf_sticky_banner_dismissed') !== '1') {
+            bottomAd.classList.remove('hidden');
         }
         if (icon) {
             icon.classList.remove('fa-compress');
             icon.classList.add('fa-expand');
         }
+
+        // 2. Exit native browser fullscreen if currently active
+        if (isNativeFS) {
+            try {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            } catch(e) {}
+        }
     }
 }
 
-// Sync fullscreen button icon with browser changes
+// Sync fullscreen button icon with browser changes (e.g. Esc key or system gesture)
 ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
     document.addEventListener(evt, () => {
-        const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+        const isNativeFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
         const icon = document.getElementById('fullscreen-icon');
-        if (icon) {
-            if (isFS) {
+        const floatingBtn = document.getElementById('btn-floating-exit-fullscreen');
+        if (!isNativeFS && isReaderFullscreen) {
+            toggleFullscreen();
+        } else if (icon) {
+            if (isNativeFS || isReaderFullscreen) {
                 icon.classList.remove('fa-expand');
                 icon.classList.add('fa-compress');
+                if (floatingBtn) {
+                    floatingBtn.classList.remove('hidden');
+                    floatingBtn.classList.add('flex');
+                }
             } else {
                 icon.classList.remove('fa-compress');
                 icon.classList.add('fa-expand');
+                if (floatingBtn) {
+                    floatingBtn.classList.add('hidden');
+                    floatingBtn.classList.remove('flex');
+                }
             }
         }
     });
