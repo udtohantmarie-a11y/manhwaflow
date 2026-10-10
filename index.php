@@ -142,6 +142,7 @@ require_once __DIR__ . '/includes/header.php';
                 <img src="<?= htmlspecialchars($heroManhwa['cover_image']) ?>" 
                      alt="<?= htmlspecialchars($heroManhwa['title']) ?>" 
                      referrerpolicy="no-referrer"
+                     onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                      class="w-full h-full object-cover">
             </div>
 
@@ -206,6 +207,8 @@ require_once __DIR__ . '/includes/header.php';
                     <a href="<?= htmlspecialchars($rh['read_url']) ?>" class="shrink-0 block">
                         <img src="<?= htmlspecialchars($rh['cover_image']) ?>" 
                              alt="<?= htmlspecialchars($rh['series_title']) ?>" 
+                             referrerpolicy="no-referrer"
+                             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                              class="w-12 h-16 rounded-lg object-cover border border-dark-750 group-hover:scale-105 transition-transform duration-200">
                     </a>
                     <div class="flex-1 min-w-0 space-y-1">
@@ -299,9 +302,6 @@ require_once __DIR__ . '/includes/header.php';
                 <?php 
                     $cardUrl = BASE_URL . "manhwa.php?id=" . urlencode($spot['id']);
                     $coverUrl = $spot['cover_url'];
-                    if (str_contains($coverUrl, 'athreascans.com') || str_contains($coverUrl, 'anisascans.in')) {
-                        $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
-                    }
                     $title = $spot['title'];
                     $genreLabel = !empty($spot['tags']) ? implode(' &bull; ', array_slice($spot['tags'], 0, 2)) : 'Webtoon';
                 ?>
@@ -311,6 +311,7 @@ require_once __DIR__ . '/includes/header.php';
                              alt="<?= htmlspecialchars($title) ?>" 
                              referrerpolicy="no-referrer"
                              loading="lazy"
+                             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                         <div class="absolute top-2 left-2 flex flex-col gap-1">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/75 backdrop-blur-md text-amber-400 border border-white/10 flex items-center gap-1">
@@ -388,9 +389,6 @@ require_once __DIR__ . '/includes/header.php';
                     <?php 
                         $cardUrl = BASE_URL . "manhwa.php?md_id=" . urlencode($m['id']);
                         $coverUrl = $m['cover_url'];
-                        if (str_contains($coverUrl, 'athreascans.com')) {
-                            $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
-                        }
                         $title = $m['title'];
                         $status = $m['status'];
                         $genresText = implode(', ', array_slice($m['tags'] ?? [], 0, 2)) ?: 'Webtoon';
@@ -403,6 +401,7 @@ require_once __DIR__ . '/includes/header.php';
                                  alt="<?= htmlspecialchars($title) ?>" 
                                  referrerpolicy="no-referrer"
                                  loading="lazy"
+                                 onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                             
                             <!-- Badges Overlay -->

@@ -42,9 +42,6 @@ if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || s
     }
 
     $coverUrl = $sourceData['cover_url'] ?? '';
-    if (str_contains($coverUrl, 'athreascans.com') || str_contains($coverUrl, 'anisascans.in')) {
-        $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
-    }
 
     $manhwa = [
         'id' => $rawId,
@@ -236,6 +233,7 @@ require_once __DIR__ . '/includes/header.php';
         <img src="<?= htmlspecialchars($manhwa['banner_image']) ?>" 
              alt="<?= htmlspecialchars($manhwa['title']) ?>" 
              referrerpolicy="no-referrer"
+             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
              class="w-full h-full object-cover opacity-25 blur-md scale-105">
         <div class="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/70 to-transparent"></div>
     </div>
@@ -259,6 +257,7 @@ require_once __DIR__ . '/includes/header.php';
                     <img src="<?= htmlspecialchars($manhwa['cover_image']) ?>" 
                          alt="<?= htmlspecialchars($manhwa['title']) ?>" 
                          referrerpolicy="no-referrer"
+                         onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                          class="w-full h-full object-cover">
                 </div>
 

@@ -1164,8 +1164,8 @@ class ChaptersFallback {
      * Neutral presentation with no 3rd-party source mentions.
      */
     public static function getExclusiveSpotlight($limit = 12) {
-        $cacheFile = self::CACHE_DIR . "/exclusive_spotlight_cache.json";
-        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+        $cacheFile = self::CACHE_DIR . "/exclusive_spotlight_v2.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 86400)) {
             $cached = json_decode(@file_get_contents($cacheFile), true);
             if (!empty($cached) && count($cached) >= 6) {
                 return array_slice($cached, 0, $limit);
@@ -1188,7 +1188,7 @@ class ChaptersFallback {
                 'id' => 'asura_return-of-the-mount-hua-sect',
                 'slug' => 'return-of-the-mount-hua-sect',
                 'title' => 'Return of the Mount Hua Sect',
-                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.b23eec.webp',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.c0cbf9.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.9',
@@ -1199,7 +1199,7 @@ class ChaptersFallback {
                 'id' => 'asura_the-greatest-estate-developer',
                 'slug' => 'the-greatest-estate-developer',
                 'title' => 'The Greatest Estate Developer',
-                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.e91f63.webp',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.ad682d.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.9',
@@ -1210,7 +1210,7 @@ class ChaptersFallback {
                 'id' => 'asura_revenge-of-the-iron-blooded-sword-hound',
                 'slug' => 'revenge-of-the-iron-blooded-sword-hound',
                 'title' => 'Revenge of the Iron-Blooded Sword Hound',
-                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.25624d.webp',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.41b6fb.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.8',
@@ -1218,54 +1218,76 @@ class ChaptersFallback {
                 'latest_chapter' => 'Ch. 110+'
             ],
             [
-                'id' => 'anisa_mr-kim-strikes-it-rich-with-auto-hunting',
-                'slug' => 'mr-kim-strikes-it-rich-with-auto-hunting',
-                'title' => 'Mr. Kim Strikes It Rich with Auto-Hunting',
-                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459347-6aa8fb938e3fd-mrkimstrikesitrichwithautohunting-16204-193x278.webp',
+                'id' => 'asura_standard-of-reincarnation',
+                'slug' => 'standard-of-reincarnation',
+                'title' => 'Standard of Reincarnation',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/standard-of-reincarnation.32ce34.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.8',
-                'tags' => ['Action', 'Hunter', 'Fantasy'],
-                'latest_chapter' => 'Ch. 50+'
+                'tags' => ['Action', 'Fantasy', 'Reincarnation'],
+                'latest_chapter' => 'Ch. 125+'
             ],
             [
-                'id' => 'anisa_starting-with-x10-you-really-exploited-the-bug',
-                'slug' => 'starting-with-x10-you-really-exploited-the-bug',
-                'title' => 'Starting with 10x, You Really Exploited the Bug',
-                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459350-13f5fb938e55c-startingwithx10youreallyexploitedthebug-16203-193x278.webp',
+                'id' => 'asura_solo-max-level-newbie',
+                'slug' => 'solo-max-level-newbie',
+                'title' => 'Solo Max-Level Newbie',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/solo-max-level-newbie.bac83f.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.8',
-                'tags' => ['Action', 'System', 'Adventure'],
-                'latest_chapter' => 'Ch. 45+'
+                'tags' => ['Action', 'Tower', 'System'],
+                'latest_chapter' => 'Ch. 180+'
             ],
             [
-                'id' => 'anisa_wildcard-alchemist',
-                'slug' => 'wildcard-alchemist',
-                'title' => 'Wildcard Alchemist',
-                'cover_url' => 'https://anisascans.in/wp-content/uploads/images/1789459356-0752fb938e8cb-wildcardalchemist-16200-193x278.webp',
+                'id' => 'asura_surviving-the-game-as-a-barbarian',
+                'slug' => 'surviving-the-game-as-a-barbarian',
+                'title' => 'Surviving the Game as a Barbarian',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/surviving-the-game-as-a-barbarian.86af24.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
-                'rating' => '4.7',
-                'tags' => ['Fantasy', 'Magic', 'Shounen'],
-                'latest_chapter' => 'Ch. 30+'
+                'rating' => '4.8',
+                'tags' => ['Action', 'Survival', 'Fantasy'],
+                'latest_chapter' => 'Ch. 90+'
             ],
             [
-                'id' => 'athrea_flower-punch',
-                'slug' => 'flower-punch',
-                'title' => 'Flower Punch',
-                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/Flower-Punch-300x400.jpg',
+                'id' => 'asura_pick-me-up-infinite-gacha',
+                'slug' => 'pick-me-up-infinite-gacha',
+                'title' => 'Pick Me Up, Infinite Gacha',
+                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/pick-me-up-infinite-gacha.3ebe61.webp',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'System', 'Game'],
+                'latest_chapter' => 'Ch. 120+'
+            ],
+            [
+                'id' => 'anisa_overgeared',
+                'slug' => 'overgeared',
+                'title' => 'Overgeared',
+                'cover_url' => 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.9',
-                'tags' => ['Romance', 'Drama', 'Comedy'],
-                'latest_chapter' => 'Ch. 40+'
+                'tags' => ['Action', 'VRMMO', 'Fantasy'],
+                'latest_chapter' => 'Ch. 220+'
+            ],
+            [
+                'id' => 'anisa_genius-archers-streaming',
+                'slug' => 'genius-archers-streaming',
+                'title' => "Genius Archer's Streaming",
+                'cover_url' => 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+                'status' => 'Ongoing',
+                'type' => 'Manhwa',
+                'rating' => '4.8',
+                'tags' => ['Action', 'Hunter', 'Streaming'],
+                'latest_chapter' => 'Ch. 60+'
             ],
             [
                 'id' => 'athrea_trembling-as-i-escape-from-you',
                 'slug' => 'trembling-as-i-escape-from-you',
                 'title' => 'Trembling as I Escape From You',
-                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/Trembling-as-I-Escape-From-You-300x400.jpg',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/07/mc38749-cover-225x300.webp',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
                 'rating' => '4.8',
@@ -1273,41 +1295,19 @@ class ChaptersFallback {
                 'latest_chapter' => 'Ch. 35+'
             ],
             [
-                'id' => 'athrea_my-teacher-will-take-care-of-it',
-                'slug' => 'my-teacher-will-take-care-of-it',
-                'title' => 'My Teacher Will Take Care of It',
-                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/My-Teacher-Will-Take-Care-of-It-300x400.jpg',
+                'id' => 'athrea_romance-saga-succubus-story',
+                'slug' => 'romance-saga-succubus-story',
+                'title' => 'ROMANCE SAGA Succubus Story',
+                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/05/tall-1-225x300.jpg',
                 'status' => 'Ongoing',
                 'type' => 'Manhwa',
-                'rating' => '4.8',
-                'tags' => ['Romance', 'Drama', 'School'],
-                'latest_chapter' => 'Ch. 28+'
-            ],
-            [
-                'id' => 'athrea_the-abandoned-duchess',
-                'slug' => 'the-abandoned-duchess',
-                'title' => 'The Abandoned Duchess',
-                'cover_url' => 'https://athreascans.com/wp-content/uploads/2026/04/The-Abandoned-Duchess-300x400.jpg',
-                'status' => 'Ongoing',
-                'type' => 'Manhwa',
-                'rating' => '4.8',
-                'tags' => ['Romance', 'Royalty', 'Drama'],
-                'latest_chapter' => 'Ch. 50+'
-            ],
-            [
-                'id' => 'asura_standard-of-reincarnation',
-                'slug' => 'standard-of-reincarnation',
-                'title' => 'Standard of Reincarnation',
-                'cover_url' => 'https://cdn.asurascans.com/asura-images/covers/standard-of-reincarnation.7c18ee.webp',
-                'status' => 'Ongoing',
-                'type' => 'Manhwa',
-                'rating' => '4.8',
-                'tags' => ['Action', 'Fantasy', 'Reincarnation'],
-                'latest_chapter' => 'Ch. 125+'
+                'rating' => '4.7',
+                'tags' => ['Romance', 'Fantasy', 'Shoujo'],
+                'latest_chapter' => 'Ch. 25+'
             ]
         ];
 
-        // Also merge dynamic titles from directory
+        // Also merge dynamic titles from Athrea directory if needed
         $athreaLive = self::getAthreaDirectory(10);
         foreach ($athreaLive as $al) {
             $exists = false;

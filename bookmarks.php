@@ -129,7 +129,11 @@ require_once __DIR__ . '/includes/header.php';
 
                     <!-- Poster -->
                     <a href="<?= $seriesUrl ?>" class="relative aspect-[2/3] overflow-hidden bg-dark-950 block">
-                        <img src="<?= htmlspecialchars($item['cover_image']) ?>" alt="<?= htmlspecialchars($item['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        <img src="<?= htmlspecialchars($item['cover_image']) ?>" 
+                             alt="<?= htmlspecialchars($item['title']) ?>" 
+                             referrerpolicy="no-referrer"
+                             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
+                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                         <div class="absolute bottom-2 left-2">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/80 text-amber-400 border border-white/10 flex items-center gap-1">
                                 <i class="fa-solid fa-star text-[9px]"></i> <?= number_format(floatval($item['rating'] ?? 4.8), 1) ?>

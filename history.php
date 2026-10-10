@@ -93,7 +93,9 @@ if ($userId) {
                     <a href="<?= htmlspecialchars($item['read_url']) ?>" class="w-20 aspect-[2/3] rounded-xl overflow-hidden bg-dark-950 shrink-0 border border-dark-750 block">
                         <img src="<?= htmlspecialchars($item['cover_image']) ?>" 
                              alt="<?= htmlspecialchars($item['series_title']) ?>" 
+                             referrerpolicy="no-referrer"
                              loading="lazy"
+                             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                     </a>
 
