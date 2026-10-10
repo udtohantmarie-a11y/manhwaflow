@@ -107,12 +107,16 @@
             if (!deferredPrompt) return;
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                const installBtns = document.querySelectorAll('.btn-pwa-install');
-                installBtns.forEach(btn => btn.classList.add('hidden'));
-            }
             deferredPrompt = null;
         }
     </script>
+
+    <!-- Non-Intrusive Sticky Bottom Ad Banner -->
+    <?php 
+    require_once __DIR__ . '/ads.php';
+    if (function_exists('renderStickyBottomBanner')) {
+        renderStickyBottomBanner();
+    }
+    ?>
 </body>
 </html>

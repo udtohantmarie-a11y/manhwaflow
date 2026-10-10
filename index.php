@@ -188,6 +188,9 @@ require_once __DIR__ . '/includes/header.php';
     </section>
     <?php endif; ?>
 
+    <!-- Non-Intrusive Top Banner Ad -->
+    <?php renderTopBannerAd(); ?>
+
     <!-- CONTINUE READING SECTION (Jump straight back into your comic!) -->
     <section id="continue-reading-section" class="space-y-4 <?= empty($recentHistory) ? 'hidden' : '' ?>">
         <div class="flex items-center justify-between pb-2 border-b border-dark-800">
