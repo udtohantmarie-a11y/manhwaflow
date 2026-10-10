@@ -5,6 +5,7 @@ class ChaptersFallback {
     const ASURA_BASE = 'https://asurascans.com';
     const WC_BASE = 'https://weebcentral.com';
     const ANISA_BASE = 'https://anisascans.in';
+    const ATHREA_BASE = 'https://athreascans.com';
     const CACHE_DIR = __DIR__ . '/../cache';
 
     // Direct Pre-mappings for Asura Scans (Murim & Hot Action scanlations)
@@ -165,6 +166,8 @@ class ChaptersFallback {
                 $chList = self::getAsuraChapters($mapping['id'], $limit);
             } elseif ($mapping['type'] === 'anisa') {
                 $chList = self::getAnisaChapters($mapping['id'], $limit);
+            } elseif ($mapping['type'] === 'athrea') {
+                $chList = self::getAthreaChapters($mapping['id'], $limit);
             }
             if (!empty($chList)) return $chList;
             // Clean up invalid or stale dynamic mapping
@@ -214,6 +217,16 @@ class ChaptersFallback {
                 $chapters = self::getAnisaChapters($anisaSlug, $limit);
                 if (!empty($chapters)) {
                     self::saveMapping($mangaId, 'anisa', $anisaSlug);
+                    return $chapters;
+                }
+            }
+
+            // D. Search Athrea Scans (Romance, Drama, Shoujo & Smut Scanlations)
+            $athreaSlug = self::searchAthreaSlug($titleToSearch);
+            if ($athreaSlug) {
+                $chapters = self::getAthreaChapters($athreaSlug, $limit);
+                if (!empty($chapters)) {
+                    self::saveMapping($mangaId, 'athrea', $athreaSlug);
                     return $chapters;
                 }
             }
@@ -640,7 +653,195 @@ class ChaptersFallback {
     }
 
     /**
-     * Get Chapter Pages for WeebCentral, Asura Scans, or Anisa Scans
+     * Search Athrea Scans dynamically for matching series slug
+     */
+    public static function searchAthreaSlug($title) {
+        $queries = self::generateSearchQueries($title);
+        foreach ($queries as $q) {
+            $url = self::ATHREA_BASE . "/?s=" . urlencode($q);
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            $html = curl_exec($ch);
+            curl_close($ch);
+
+            if (!$html) continue;
+
+            // Pattern 1: Manga link with title attribute
+            if (preg_match_all('/<a[^>]+href=["\'](?:https:\/\/athreascans\.com)?\/manga\/([^"\'\/]+)\/?["\'][^>]*title=["\']([^"\']+)["\']/i', $html, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $candidateSlug = trim($m[1]);
+                    $candidateTitle = html_entity_decode(trim($m[2]), ENT_QUOTES | ENT_HTML5);
+                    if (self::isTitleMatch($title, $candidateTitle)) {
+                        return $candidateSlug;
+                    }
+                }
+            }
+
+            // Pattern 2: Any manga link in search results
+            if (preg_match_all('/href=["\'](?:https:\/\/athreascans\.com)?\/manga\/([^"\'\/]+)\/?["\']/i', $html, $matches2)) {
+                $slugs = array_values(array_unique($matches2[1]));
+                foreach ($slugs as $s) {
+                    $slugTitle = str_replace('-', ' ', $s);
+                    if (self::isTitleMatch($title, $slugTitle)) {
+                        return $s;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fetch chapters from Athrea Scans
+     */
+    public static function getAthreaChapters($slug, $limit = 1000) {
+        $cacheFile = self::CACHE_DIR . "/fallback_athrea_{$slug}_chapters.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return array_slice($cached, 0, $limit);
+        }
+
+        $url = self::ATHREA_BASE . "/manga/{$slug}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $chapters = [];
+
+        // Match chapters via data-num list items or chapter links
+        if (preg_match_all('/<li[^>]*data-num=["\']([^"\']+)["\'][^>]*>[\s\S]*?<a[^>]+href=["\'](?:https:\/\/athreascans\.com)?\/([^"\'\/]+)\/?["\'][^>]*>([\s\S]*?)<\/a>/i', $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $chNum = floatval($m[1]);
+                $chSlug = trim($m[2]);
+                $key = $chNum;
+                if (!isset($chapters[$key])) {
+                    $chapters[$key] = [
+                        'id' => "athrea_{$slug}_ch_{$chSlug}",
+                        'chapter_number' => $chNum,
+                        'title' => "Chapter " . $chNum,
+                        'pages' => 20,
+                        'language' => 'en',
+                        'externalUrl' => null,
+                        'created_at' => date('Y-m-d')
+                    ];
+                }
+            }
+        }
+
+        // Fallback matching if data-num is missing
+        if (empty($chapters)) {
+            if (preg_match_all('/<a[^>]+href=["\']https:\/\/athreascans\.com\/([^"\'\/]+)\/?["\'][^>]*>([\s\S]*?)<\/a>/i', $html, $matchesFallback, PREG_SET_ORDER)) {
+                foreach ($matchesFallback as $m) {
+                    $chSlug = trim($m[1]);
+                    if (!preg_match('/(?:chapter|ch)[-_]?([0-9.]+)/i', $chSlug, $cn)) continue;
+                    $chNum = floatval($cn[1]);
+                    $key = $chNum;
+                    if (!isset($chapters[$key])) {
+                        $chapters[$key] = [
+                            'id' => "athrea_{$slug}_ch_{$chSlug}",
+                            'chapter_number' => $chNum,
+                            'title' => "Chapter " . $chNum,
+                            'pages' => 20,
+                            'language' => 'en',
+                            'externalUrl' => null,
+                            'created_at' => date('Y-m-d')
+                        ];
+                    }
+                }
+            }
+        }
+
+        ksort($chapters);
+        $list = array_values($chapters);
+        if (!empty($list)) {
+            @file_put_contents($cacheFile, json_encode($list));
+        }
+
+        return array_slice($list, 0, $limit);
+    }
+
+    /**
+     * Fetch chapter images from Athrea Scans
+     */
+    public static function getAthreaPages($slug, $chapterSlug) {
+        $cacheFile = self::CACHE_DIR . "/fallback_athrea_{$slug}_{$chapterSlug}_pages.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 86400)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::ATHREA_BASE . "/{$chapterSlug}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $pages = [];
+
+        // Method 1: ts_reader.run JSON payload
+        if (preg_match('/ts_reader\.run\((.*?)\);/is', $html, $tsMatches)) {
+            $tsData = json_decode($tsMatches[1], true);
+            if (!empty($tsData['sources'])) {
+                foreach ($tsData['sources'] as $src) {
+                    if (!empty($src['images']) && is_array($src['images'])) {
+                        foreach ($src['images'] as $imgUrl) {
+                            $imgUrl = trim($imgUrl);
+                            if (!empty($imgUrl) && !str_contains($imgUrl, 'logo') && !str_contains($imgUrl, 'banner')) {
+                                $pages[] = $imgUrl;
+                            }
+                        }
+                        if (!empty($pages)) break;
+                    }
+                }
+            }
+        }
+
+        // Method 2: Fallback to #readerarea img tags
+        if (empty($pages)) {
+            if (preg_match('/<div[^>]*id=["\']readerarea["\'][^>]*>(.*?)<\/div>/is', $html, $readerArea)) {
+                preg_match_all('/<img[^>]+(?:data-src|data-lazy-src|src)=["\']([^"\']+)["\']/i', $readerArea[1], $imgMatches);
+                $rawPages = $imgMatches[1] ?? [];
+                foreach ($rawPages as $p) {
+                    $cleanUrl = trim($p);
+                    if (!empty($cleanUrl) && !str_contains($cleanUrl, 'logo') && !str_contains($cleanUrl, 'banner')) {
+                        $pages[] = $cleanUrl;
+                    }
+                }
+            }
+        }
+
+        $pages = array_values(array_unique($pages));
+        if (!empty($pages)) {
+            @file_put_contents($cacheFile, json_encode($pages));
+        }
+        return $pages;
+    }
+
+    /**
+     * Get Chapter Pages for WeebCentral, Asura Scans, Anisa Scans, or Athrea Scans
      */
     public static function getPages($chapterId) {
         if (!is_dir(self::CACHE_DIR)) {
@@ -733,6 +934,14 @@ class ChaptersFallback {
         if (str_starts_with($chapterId, 'anisa_')) {
             if (preg_match('/^anisa_(.+)_ch_(.+)$/', $chapterId, $matches)) {
                 return self::getAnisaPages($matches[1], $matches[2]);
+            }
+            return [];
+        }
+
+        // --- 4. Athrea Scans Chapter Images ---
+        if (str_starts_with($chapterId, 'athrea_')) {
+            if (preg_match('/^athrea_(.+)_ch_(.+)$/', $chapterId, $matches)) {
+                return self::getAthreaPages($matches[1], $matches[2]);
             }
             return [];
         }

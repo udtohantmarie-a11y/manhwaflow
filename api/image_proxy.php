@@ -34,6 +34,7 @@ $allowedHosts = [
     'lowee.us',
     'asurascans.com',
     'anisascans.in',
+    'athreascans.com',
     'mgread.io',
     'like.mgread.io'
 ];
@@ -114,7 +115,17 @@ curl_setopt($ch, CURLOPT_TIMEOUT, 20);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
-curl_setopt($ch, CURLOPT_REFERER, 'https://mangadex.org/');
+$referer = 'https://mangadex.org/';
+if (str_contains($host, 'athreascans.com')) {
+    $referer = 'https://athreascans.com/';
+} elseif (str_contains($host, 'asurascans.com')) {
+    $referer = 'https://asurascans.com/';
+} elseif (str_contains($host, 'anisascans.in')) {
+    $referer = 'https://anisascans.in/';
+} elseif (str_contains($host, 'weebcentral.com') || str_contains($host, 'compsci88.com')) {
+    $referer = 'https://weebcentral.com/';
+}
+curl_setopt($ch, CURLOPT_REFERER, $referer);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
     'Accept-Language: en-US,en;q=0.9',

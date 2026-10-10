@@ -547,7 +547,7 @@ class MangaDexAPI {
      * Get Chapter Pages Live via @Home CDN or Secondary Fallback Provider
      */
     public static function getChapterPagesLive($chapterId, $dataSaver = true) {
-        if (str_starts_with($chapterId, 'asura_') || str_starts_with($chapterId, 'wc_') || str_starts_with($chapterId, 'anisa_')) {
+        if (str_starts_with($chapterId, 'asura_') || str_starts_with($chapterId, 'wc_') || str_starts_with($chapterId, 'anisa_') || str_starts_with($chapterId, 'athrea_')) {
             require_once __DIR__ . '/chapters_fallback.php';
             return ChaptersFallback::getPages($chapterId);
         }
