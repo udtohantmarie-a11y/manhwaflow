@@ -395,12 +395,13 @@ class MangaDexAPI {
     public static function getChaptersLive($mangaId, $limit = 1000, $mangaTitle = '') {
         require_once __DIR__ . '/chapters_fallback.php';
 
+        if (empty($mangaTitle)) {
+            $mDetails = self::getMangaDetailsLive($mangaId);
+            $mangaTitle = $mDetails['title'] ?? '';
+        }
+
         // Check if pre-mapped or cached dynamic fallback mapping exists
         $existingMapping = ChaptersFallback::getMapping($mangaId);
-        if ($existingMapping) {
-            $fb = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle);
-            if (!empty($fb)) return $fb;
-        }
 
         // Fetch from MangaDex with limit=500
         $params = [
@@ -425,7 +426,9 @@ class MangaDexAPI {
 
         $chapters = [];
         $seen = [];
+        $hostedSeen = [];
         $hostedCount = 0;
+        $minHostedNum = null;
         $maxChapterNum = 0;
 
         foreach ($feedData as $ch) {
@@ -452,6 +455,10 @@ class MangaDexAPI {
                                 'created_at' => $attr['publishAt'] ?? $attr['createdAt'] ?? date('Y-m-d')
                             ];
                             $hostedCount++;
+                            $hostedSeen[round($chNumFloat, 2)] = true;
+                            if ($minHostedNum === null || $chNumFloat < $minHostedNum) {
+                                $minHostedNum = $chNumFloat;
+                            }
                             break;
                         }
                     }
@@ -466,6 +473,10 @@ class MangaDexAPI {
 
             if ($hasPages && !$isExternal) {
                 $hostedCount++;
+                $hostedSeen[round($chNumFloat, 2)] = true;
+                if ($minHostedNum === null || $chNumFloat < $minHostedNum) {
+                    $minHostedNum = $chNumFloat;
+                }
             }
 
             $chapters[] = [
@@ -479,15 +490,49 @@ class MangaDexAPI {
             ];
         }
 
-        // When to check secondary provider (WeebCentral, Asura Scans, Anisa Scans):
+        // When to invoke secondary provider (WeebCentral, Asura Scans, Anisa Scans):
         // 1. MangaDex has 0 hosted chapters (DMCA removed or only external links)
-        // 2. MangaDex has missing/incomplete chapters (< 15 chapters, or missing > 15% of max chapter)
-        // 3. Series already has an established fallback mapping
-        $isSparse = ($hostedCount === 0 || $hostedCount < 15 || ($maxChapterNum > 0 && $hostedCount < ($maxChapterNum * 0.85)));
-        if ($isSparse || $existingMapping) {
+        // 2. MangaDex starts late (earliest hosted chapter is > 1.5, e.g. starts at 17, 100, 255)
+        // 3. MangaDex is missing Chapter 1 and Chapter 0
+        // 4. MangaDex has sparse/incomplete chapters (< 15 chapters, or missing > 30% of max chapter)
+        // 5. Series already has an established fallback mapping
+        $startsLate = ($hostedCount > 0 && ($minHostedNum === null || $minHostedNum > 1.5 || (!isset($hostedSeen[1]) && !isset($hostedSeen[0]))));
+        $hasZeroHosted = ($hostedCount === 0);
+        $isSparse = ($hostedCount < 15 || ($maxChapterNum > 0 && $hostedCount < ($maxChapterNum * 0.70)));
+        $needsFallback = ($startsLate || $hasZeroHosted || $isSparse || !empty($existingMapping));
+
+        if ($needsFallback) {
             $fallbackList = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle);
-            if (!empty($fallbackList) && ($hostedCount === 0 || count($fallbackList) > $hostedCount)) {
-                return $fallbackList;
+            if (!empty($fallbackList)) {
+                if ($hasZeroHosted) {
+                    return $fallbackList;
+                }
+
+                // Seamless Gapless Merge:
+                // Seed with all Fallback chapters (ensures chapters 0, 1, 2, ..., N are present)
+                $merged = [];
+                foreach ($fallbackList as $fbCh) {
+                    $key = (string)round($fbCh['chapter_number'], 2);
+                    $merged[$key] = $fbCh;
+                }
+
+                // Overlay MangaDex chapters:
+                // If MangaDex has brand new chapters that Fallback doesn't have yet, add them!
+                foreach ($chapters as $mdCh) {
+                    $key = (string)round($mdCh['chapter_number'], 2);
+                    $isMdHosted = ($mdCh['pages'] > 0 && empty($mdCh['externalUrl']));
+                    if (!isset($merged[$key])) {
+                        if ($isMdHosted) {
+                            $merged[$key] = $mdCh;
+                        }
+                    }
+                }
+
+                uasort($merged, function($a, $b) {
+                    return $a['chapter_number'] <=> $b['chapter_number'];
+                });
+
+                return array_slice(array_values($merged), 0, $limit);
             }
         }
 

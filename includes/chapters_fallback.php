@@ -27,8 +27,24 @@ class ChaptersFallback {
         'c0ee660b-f9f2-45c3-8068-5123ff53f84a' => '01J76XY7M0W9WWJ55VJYYB2J1S', // Tower of God (652+ ch)
         '9a414441-bbad-43f1-a3a7-dc262ca790a3' => '01J76XYDMWWJX3T4BFWR84FQQK', // Omniscient Reader (312+ ch)
         'b70c015b-e66d-4952-9721-e00965d5df29' => '01J76XYE23859ZWDP7BJ520AKY', // The Beginning After The End
-        'b9687e83-9b88-44e2-8869-702b545f4459' => '01J76XYA1TQYKV6W4BCMR2WD5M', // Wind Breaker
-        '8b3ce3c1-0c5a-4365-985d-8b89e701ba53' => '01J76XYD3Q2Q7HYYMB3FSDPSKC'  // Eleceed
+        'b9687e83-9b88-44e2-8869-702b545f4459' => '01J76XYA1TQYKV6W4BCMR2WD5M', // Wind Breaker (500+ ch)
+        '8b3ce3c1-0c5a-4365-985d-8b89e701ba53' => '01J76XYD3Q2Q7HYYMB3FSDPSKC', // Eleceed (300+ ch)
+        '7f15e45c-b7fd-4164-8d8e-ede14a817f0d' => '01JNKH97S0APRHFW53V9DSFCGH', // The Extra's Academy Survival Guide (starts at 0 & 1, 128 ch)
+        '6a468761-5bd6-4de0-a0cb-47cb456ac2e0' => '01J76XYCN4PDFA5CZQXHK82PXD', // A Returner's Magic Should Be Special (starts at 1, 269 ch)
+        '14569f2f-f66a-4c67-ac7f-a37823a0fa23' => '01J76XYDMZ059WG12B0QQWRYXS', // Villains Are Destined to Die (starts at 1, 170+ ch)
+        '4a973243-952e-44d7-a50f-883b4b7c9cc2' => '01J76XYEADS8EDBWFPVSF8J3VG', // SSS-Class Revival Hunter (starts at 1, 150+ ch)
+        'd993f789-e7e5-4832-92fd-37614220b427' => '01J76XYCRFYM9JT9WE2M8Q6D6T', // The Skeleton Soldier Failed to Defend the Dungeon (starts at 1, 280+ ch)
+        '73bc69fa-9ba9-4533-a243-ebc11651339f' => '01J76XYDQNFBDE0MD2EDS122Y5', // The Villainess Turns the Hourglass (starts at 1, 125 ch)
+        '1ffca916-3ad7-46d2-9591-a9b39e639971' => '01J76XYDMS2ZM3HF00619R92NJ', // Second Life Ranker (starts at 1, 170+ ch)
+        '50fc2f0f-aeac-4152-82ba-164b3bb3b5b3' => '01J76XYDQJ8P5BD4Z1XVQH53DT', // The Monstrous Duke's Adopted Daughter (starts at 1, 150+ ch)
+        '722a45c0-5e55-40f2-929b-ff69b0989edb' => '01J76XYDQPCQQR5DQXXF8NHKWK', // Who Made Me a Princess (starts at 1, 125 ch)
+        'b407de00-75a5-415a-a001-585fb41b9cf2' => '01J76XYE21JW91FDRNMX32J0WS', // The Max Level Hero Strikes Back (starts at 1, 180+ ch)
+        '73886188-f459-4b80-8781-66a60520b420' => '01J76XYDQ9JTWW4THBJWPXNJ9H', // The Fantasie of a Stepmother (starts at 1, 130+ ch)
+        'f89ed57a-e4c0-48f5-b664-8ef88aa87fd9' => '01J76XYEFWZNMKWCPH2W9SVSSD', // I Shall Master This Family (starts at 1, 160+ ch)
+        '85b51b37-0ce6-4144-a19b-6b064bc2c2ae' => '01J76XYDQA0S3W7B918CTNC9Q4', // Beware the Villainess! (starts at 1, 130+ ch)
+        '58167656-a065-4b49-b499-bd73d00555d5' => '01J76XYGY7FDV857J4HJAZ131K', // Pick Me Up, Infinite Gacha (starts at 1, 130+ ch)
+        'b24f5a32-15f9-4458-8686-2a78f24b2203' => '01J76XYF02HVMZAMXFFS51ANAM', // Return of the Mad Demon (starts at 1, 140+ ch)
+        'a603952f-8706-444f-8367-73b37996c568' => '01J76XYB7A985W3P3K887X9375'  // Damn Reincarnation (starts at 1, 80+ ch)
     ];
 
     /**
@@ -134,7 +150,7 @@ class ChaptersFallback {
     /**
      * Get chapters for a manga when MangaDex is missing or incomplete
      */
-    public static function getChapters($mangaId, $limit = 1000, $mangaTitle = '') {
+    public static function getChapters($mangaId, $limit = 1000, $mangaTitle = '', $altTitle = '') {
         if (!is_dir(self::CACHE_DIR)) {
             @mkdir(self::CACHE_DIR, 0777, true);
         }
@@ -142,30 +158,38 @@ class ChaptersFallback {
         // 1. Check existing pre-map or cached dynamic mapping
         $mapping = self::getMapping($mangaId);
         if ($mapping) {
+            $chList = [];
             if ($mapping['type'] === 'wc') {
                 $chList = self::getWeebCentralChapters($mapping['id'], $limit);
-                if (!empty($chList)) return $chList;
             } elseif ($mapping['type'] === 'asura') {
                 $chList = self::getAsuraChapters($mapping['id'], $limit);
-                if (!empty($chList)) return $chList;
             } elseif ($mapping['type'] === 'anisa') {
                 $chList = self::getAnisaChapters($mapping['id'], $limit);
-                if (!empty($chList)) return $chList;
+            }
+            if (!empty($chList)) return $chList;
+            // Clean up invalid or stale dynamic mapping
+            self::deleteMapping($mangaId);
+        }
+
+        // 2. If title is not passed, auto-fetch from MangaDex
+        if (empty($mangaTitle)) {
+            require_once __DIR__ . '/mangadex.php';
+            $details = MangaDexAPI::getMangaDetailsLive($mangaId);
+            if ($details) {
+                $mangaTitle = $details['title'] ?? '';
+                if (empty($altTitle)) {
+                    $altTitle = $details['alt_title'] ?? '';
+                }
             }
         }
 
-        // 2. Dynamic multi-source search by title if title is provided
-        if (!empty($mangaTitle)) {
-            // A. Search WeebCentral (huge complete catalog)
-            $wcId = self::searchWeebCentralId($mangaTitle);
-            if (!$wcId) {
-                $cleanTitle = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $mangaTitle));
-                $cleanTitle = trim(explode(':', $cleanTitle)[0]);
-                $cleanTitle = trim(explode('-', $cleanTitle)[0]);
-                if (strlen($cleanTitle) >= 3 && $cleanTitle !== $mangaTitle) {
-                    $wcId = self::searchWeebCentralId($cleanTitle);
-                }
-            }
+        // 3. Dynamic multi-source search across candidate titles
+        $candidateTitles = array_values(array_filter([$mangaTitle, $altTitle]));
+        foreach ($candidateTitles as $titleToSearch) {
+            if (empty($titleToSearch) || strlen(trim($titleToSearch)) < 2) continue;
+
+            // A. Search WeebCentral (largest complete archive)
+            $wcId = self::searchWeebCentralId($titleToSearch);
             if ($wcId) {
                 $chapters = self::getWeebCentralChapters($wcId, $limit);
                 if (!empty($chapters)) {
@@ -174,8 +198,8 @@ class ChaptersFallback {
                 }
             }
 
-            // B. Search Asura Scans (Murim, Action, System)
-            $asuraSlug = self::searchAsuraSlug($mangaTitle);
+            // B. Search Asura Scans (Action, Murim, System)
+            $asuraSlug = self::searchAsuraSlug($titleToSearch);
             if ($asuraSlug) {
                 $chapters = self::getAsuraChapters($asuraSlug, $limit);
                 if (!empty($chapters)) {
@@ -185,7 +209,7 @@ class ChaptersFallback {
             }
 
             // C. Search Anisa Scans (Trending Manhwa & Scanlations)
-            $anisaSlug = self::searchAnisaSlug($mangaTitle);
+            $anisaSlug = self::searchAnisaSlug($titleToSearch);
             if ($anisaSlug) {
                 $chapters = self::getAnisaChapters($anisaSlug, $limit);
                 if (!empty($chapters)) {
@@ -336,29 +360,95 @@ class ChaptersFallback {
     }
 
     /**
+     * Generate high-probability sanitized search queries for upstream providers
+     */
+    public static function generateSearchQueries($title) {
+        if (empty($title)) return [];
+        $queries = [];
+
+        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
+        $queries[] = $clean;
+
+        // Remove possessive 's or curly ’s
+        $noPossessive = trim(preg_replace('/[\'’`]s\b/i', '', $clean));
+        if ($noPossessive !== $clean) {
+            $queries[] = $noPossessive;
+        }
+
+        // Alphanumeric with spaces
+        $alnum = trim(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $clean));
+        $alnum = trim(preg_replace('/\s+/', ' ', $alnum));
+        if (!empty($alnum)) {
+            $queries[] = $alnum;
+        }
+
+        $alnumNoPossessive = trim(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $noPossessive));
+        $alnumNoPossessive = trim(preg_replace('/\s+/', ' ', $alnumNoPossessive));
+        if (!empty($alnumNoPossessive)) {
+            $queries[] = $alnumNoPossessive;
+        }
+
+        // Subtitle cuts (colon, hyphen, comma)
+        foreach ([':', '-', ','] as $sep) {
+            if (str_contains($clean, $sep)) {
+                $part = trim(explode($sep, $clean)[0]);
+                if (strlen($part) >= 3) {
+                    $queries[] = $part;
+                }
+            }
+        }
+
+        // Word subsets (first 3 words, first 2 words)
+        $words = array_values(array_filter(explode(' ', $alnumNoPossessive)));
+        if (count($words) >= 3) {
+            $queries[] = implode(' ', array_slice($words, 0, 3));
+            $queries[] = implode(' ', array_slice($words, 0, 2));
+        }
+
+        $stopWords = ['the', 'a', 'an', 'of', 'in', 'to', 'for', 'with', 'on', 'at', 'i', 'my'];
+        $nonStop = array_values(array_filter($words, fn($w) => !in_array(strtolower($w), $stopWords)));
+        if (count($nonStop) >= 2) {
+            $queries[] = implode(' ', array_slice($nonStop, 0, 2));
+            if (count($nonStop) >= 3) {
+                $queries[] = implode(' ', array_slice($nonStop, 0, 3));
+            }
+        }
+
+        $final = [];
+        foreach ($queries as $q) {
+            $trimmed = trim($q);
+            if (strlen($trimmed) >= 3 && !in_array($trimmed, $final)) {
+                $final[] = $trimmed;
+            }
+        }
+        return $final;
+    }
+
+    /**
      * Search WeebCentral dynamically for matching series ID
      */
     public static function searchWeebCentralId($title) {
-        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
-        $q = urlencode($clean);
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, self::WC_BASE . "/search/data?text={$q}");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        $html = curl_exec($ch);
-        curl_close($ch);
+        $queries = self::generateSearchQueries($title);
+        foreach ($queries as $q) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, self::WC_BASE . "/search/data?text=" . urlencode($q));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+            curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+            $html = curl_exec($ch);
+            curl_close($ch);
 
-        if (!$html) return null;
+            if (!$html) continue;
 
-        if (preg_match_all('/href="https:\/\/weebcentral\.com\/series\/([A-Z0-9]+)\/([^"]+)"[^>]*class="[^"]*link-hover">([^<]+)<\/a>/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $m) {
-                $candidateId = $m[1];
-                $candidateTitle = html_entity_decode(trim($m[3]), ENT_QUOTES | ENT_HTML5);
-                if (self::isTitleMatch($clean, $candidateTitle) || self::isTitleMatch($title, $candidateTitle)) {
-                    return $candidateId;
+            if (preg_match_all('/href="https:\/\/weebcentral\.com\/series\/([A-Z0-9]+)\/([^"]+)"[^>]*class="[^"]*link-hover">([^<]+)<\/a>/i', $html, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $candidateId = $m[1];
+                    $candidateTitle = html_entity_decode(trim($m[3]), ENT_QUOTES | ENT_HTML5);
+                    if (self::isTitleMatch($title, $candidateTitle)) {
+                        return $candidateId;
+                    }
                 }
             }
         }
@@ -369,27 +459,27 @@ class ChaptersFallback {
      * Search Asura Scans dynamically for matching series slug
      */
     public static function searchAsuraSlug($title) {
-        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
-        $cleanAlnum = trim(preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $clean));
-        $q = urlencode($cleanAlnum);
-        $ch = curl_init(self::ASURA_BASE . '/comics?name=' . $q);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        $html = curl_exec($ch);
-        curl_close($ch);
+        $queries = self::generateSearchQueries($title);
+        foreach ($queries as $q) {
+            $ch = curl_init(self::ASURA_BASE . '/comics?name=' . urlencode($q));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+            $html = curl_exec($ch);
+            curl_close($ch);
 
-        if (!$html) return null;
+            if (!$html) continue;
 
-        if (preg_match_all('/href="\/comics\/([a-z0-9-]+)"[^>]*>/i', $html, $m)) {
-            $slugs = array_values(array_unique($m[1]));
-            foreach ($slugs as $s) {
-                $cleanSlug = preg_replace('/-[a-f0-9]{8}$/', '', $s);
-                $cleanSlugTitle = str_replace('-', ' ', $cleanSlug);
-                if (self::isTitleMatch($clean, $cleanSlugTitle) || self::isTitleMatch($title, $cleanSlugTitle)) {
-                    return $s;
+            if (preg_match_all('/href="\/comics\/([a-z0-9-]+)"[^>]*>/i', $html, $m)) {
+                $slugs = array_values(array_unique($m[1]));
+                foreach ($slugs as $s) {
+                    $cleanSlug = preg_replace('/-[a-f0-9]{8}$/', '', $s);
+                    $cleanSlugTitle = str_replace('-', ' ', $cleanSlug);
+                    if (self::isTitleMatch($title, $cleanSlugTitle)) {
+                        return $s;
+                    }
                 }
             }
         }
@@ -400,42 +490,42 @@ class ChaptersFallback {
      * Search Anisa Scans dynamically for matching series slug
      */
     public static function searchAnisaSlug($title) {
-        $clean = trim(preg_replace('/\s*[\(\[].*?[\)\]]/', '', $title));
-        $q = urlencode($clean);
-        $url = self::ANISA_BASE . "/?s={$q}&post_type=wp-manga";
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        $html = curl_exec($ch);
-        curl_close($ch);
+        $queries = self::generateSearchQueries($title);
+        foreach ($queries as $q) {
+            $url = self::ANISA_BASE . "/?s=" . urlencode($q) . "&post_type=wp-manga";
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+            $html = curl_exec($ch);
+            curl_close($ch);
 
-        if (!$html) return null;
+            if (!$html) continue;
 
-        // Pattern 1: Madara standard search result titles
-        if (preg_match_all('/<a href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"[^>]*title="([^"]+)"/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $m) {
-                $candidateSlug = $m[1];
-                $candidateTitle = html_entity_decode(trim($m[2]), ENT_QUOTES | ENT_HTML5);
-                if (self::isTitleMatch($clean, $candidateTitle) || self::isTitleMatch($title, $candidateTitle)) {
-                    return $candidateSlug;
+            // Pattern 1: Madara standard search result titles
+            if (preg_match_all('/<a href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"[^>]*title="([^"]+)"/i', $html, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $candidateSlug = $m[1];
+                    $candidateTitle = html_entity_decode(trim($m[2]), ENT_QUOTES | ENT_HTML5);
+                    if (self::isTitleMatch($title, $candidateTitle)) {
+                        return $candidateSlug;
+                    }
+                }
+            }
+
+            // Pattern 2: Any manga link in search results
+            if (preg_match_all('/href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"/i', $html, $matches2)) {
+                $slugs = array_values(array_unique($matches2[1]));
+                foreach ($slugs as $s) {
+                    $slugTitle = str_replace('-', ' ', $s);
+                    if (self::isTitleMatch($title, $slugTitle)) {
+                        return $s;
+                    }
                 }
             }
         }
-
-        // Pattern 2: Any manga link in search results
-        if (preg_match_all('/href="https:\/\/anisascans\.in\/manga\/([^"\/]+)\/"/i', $html, $matches2)) {
-            $slugs = array_values(array_unique($matches2[1]));
-            foreach ($slugs as $s) {
-                $slugTitle = str_replace('-', ' ', $s);
-                if (self::isTitleMatch($clean, $slugTitle) || self::isTitleMatch($title, $slugTitle)) {
-                    return $s;
-                }
-            }
-        }
-
         return null;
     }
 

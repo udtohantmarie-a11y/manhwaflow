@@ -30,6 +30,8 @@ $allowedHosts = [
     'uploads.mangadex.org',
     'api.mangadex.org',
     'temp.compsci88.com',
+    'compsci88.com',
+    'lowee.us',
     'asurascans.com',
     'anisascans.in',
     'mgread.io',
