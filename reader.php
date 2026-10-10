@@ -881,6 +881,10 @@ async function submitComment(e) {
 
             const counter = document.getElementById('comment-counter');
             if (counter) counter.textContent = data.count;
+
+            if (data.coins_awarded && data.coins_awarded > 0) {
+                alert("🎉 Tagumpay! Naka-earn ka ng +" + data.coins_awarded + " Flow Coins para sa iyong comment!");
+            }
         } else if (data.auth_required) {
             alert(data.message || 'Please log in to leave a comment.');
             window.location.href = '<?= BASE_URL ?>login.php?redirect=' + encodeURIComponent(window.location.href);

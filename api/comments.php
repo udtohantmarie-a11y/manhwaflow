@@ -81,13 +81,33 @@ if ($action === 'add') {
     $ins->execute([$chapterId, $seriesId, $userId, $username, $avatar, $comment]);
     $newId = $pdo->lastInsertId();
 
-    // Fetch count
-    $cntStmt = $pdo->prepare("SELECT COUNT(*) FROM chapter_comments WHERE chapter_id = ?");
-    $cntStmt->execute([$chapterId]);
-    $totalCount = intval($cntStmt->fetchColumn());
+    // Award Flow Coins for chapter commenting (+5 Flow Coins per comment, up to 5 times daily)
+    $coinsAwarded = 0;
+    try {
+        $today = date('Y-m-d');
+        $cCountStmt = $pdo->prepare("SELECT COUNT(*) FROM `chapter_comments` WHERE `user_id` = ? AND DATE(`created_at`) = ?");
+        $cCountStmt->execute([$userId, $today]);
+        $cCount = intval($cCountStmt->fetchColumn());
+
+        if ($cCount <= 5) {
+            $coinsAwarded = 5;
+            $pdo->prepare("
+                INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `streak_days`) 
+                VALUES (?, ?, ?, 0) 
+                ON DUPLICATE KEY UPDATE `coins` = `coins` + ?, `total_earned` = `total_earned` + ?
+            ")->execute([$userId, $coinsAwarded, $coinsAwarded, $coinsAwarded, $coinsAwarded]);
+
+            try {
+                $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'comment', ?, ?)");
+                $log->execute([$userId, $coinsAwarded, "Chapter Discussion Comment on Chapter {$chapterId}"]);
+            } catch (Exception $eLog) {}
+        }
+    } catch (Exception $e) {}
 
     echo json_encode([
         'success' => true,
+        'coins_awarded' => $coinsAwarded,
+        'message' => ($coinsAwarded > 0) ? "Comment posted! +{$coinsAwarded} Flow Coins earned! 🎉" : "Comment posted successfully!",
         'comment' => [
             'id' => $newId,
             'chapter_id' => $chapterId,

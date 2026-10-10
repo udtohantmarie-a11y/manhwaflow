@@ -10,68 +10,272 @@ if (session_status() === PHP_SESSION_NONE) {
 $userId = $_SESSION['user_id'] ?? null;
 $redeemAlert = null;
 
-// Server-side Direct POST Redeem Handler (Bypasses InfinityFree aes.js AJAX bot barrier)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'redeem_code') {
-    $inputCode = strtoupper(trim($_POST['code'] ?? ''));
-    if (!$userId) {
-        $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to redeem promo codes!'];
-    } elseif (empty($inputCode)) {
-        $redeemAlert = ['type' => 'rose', 'message' => 'Mangyaring maglagay ng redeem code (Please enter a redeem code).'];
-    } else {
-        require_once __DIR__ . '/api/rewards.php';
-        ensureRedeemInfrastructure($pdo);
+// Server-side Direct Native POST Handler (Bypasses InfinityFree aes.js AJAX bot barrier 100%)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $act = $_POST['action'];
 
-        try {
-            $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
-            $cStmt->execute([$inputCode]);
-            $codeRow = $cStmt->fetch();
+    // 1. Redeem Code
+    if ($act === 'redeem_code') {
+        $inputCode = strtoupper(trim($_POST['code'] ?? ''));
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to redeem promo codes!'];
+        } elseif (empty($inputCode)) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Mangyaring maglagay ng redeem code (Please enter a redeem code).'];
+        } else {
+            require_once __DIR__ . '/api/rewards.php';
+            ensureRedeemInfrastructure($pdo);
 
-            if (!$codeRow) {
-                $redeemAlert = [
-                    'type' => 'rose',
-                    'message' => 'Invalid or unknown redeem code. I-follow ang aming official Facebook page para sa mga active promo codes!'
-                ];
-            } elseif (!empty($codeRow['expires_at']) && strtotime($codeRow['expires_at']) < time()) {
-                $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has expired. Check our Facebook page for new monthly codes!'];
-            } elseif (intval($codeRow['max_uses']) > 0 && intval($codeRow['used_count']) >= intval($codeRow['max_uses'])) {
-                $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has reached its maximum claim limit.'];
-            } else {
-                // Check if user already claimed
-                $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
-                $checkUsed->execute([$userId, $codeRow['id']]);
-                if ($checkUsed->fetch()) {
-                    $redeemAlert = ['type' => 'amber', 'message' => 'Na-redeem mo na ang code na ito! (You have already claimed this promo code).' ];
+            try {
+                $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
+                $cStmt->execute([$inputCode]);
+                $codeRow = $cStmt->fetch();
+
+                if (!$codeRow) {
+                    $redeemAlert = [
+                        'type' => 'rose',
+                        'message' => 'Invalid or unknown redeem code. I-follow ang aming official Facebook page para sa mga active promo codes!'
+                    ];
+                } elseif (!empty($codeRow['expires_at']) && strtotime($codeRow['expires_at']) < time()) {
+                    $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has expired. Check our Facebook page for new monthly codes!'];
+                } elseif (intval($codeRow['max_uses']) > 0 && intval($codeRow['used_count']) >= intval($codeRow['max_uses'])) {
+                    $redeemAlert = ['type' => 'rose', 'message' => 'This redeem code has reached its maximum claim limit.'];
                 } else {
-                    $rewardCoins = intval($codeRow['coins']);
+                    $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
+                    $checkUsed->execute([$userId, $codeRow['id']]);
+                    if ($checkUsed->fetch()) {
+                        $redeemAlert = ['type' => 'amber', 'message' => 'Na-redeem mo na ang code na ito! (You have already claimed this promo code).' ];
+                    } else {
+                        $rewardCoins = intval($codeRow['coins']);
+                        $pdo->beginTransaction();
+
+                        $insRedeem = $pdo->prepare("INSERT INTO `user_redeemed_codes` (`user_id`, `code_id`, `coins_awarded`) VALUES (?, ?, ?)");
+                        $insRedeem->execute([$userId, $codeRow['id'], $rewardCoins]);
+
+                        $upCode = $pdo->prepare("UPDATE `redeem_codes` SET `used_count` = `used_count` + 1 WHERE `id` = ?");
+                        $upCode->execute([$codeRow['id']]);
+
+                        $upUser = $pdo->prepare("
+                            INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `streak_days`) 
+                            VALUES (?, ?, ?, 0) 
+                            ON DUPLICATE KEY UPDATE `coins` = `coins` + ?, `total_earned` = `total_earned` + ?
+                        ");
+                        $upUser->execute([$userId, $rewardCoins, $rewardCoins, $rewardCoins, $rewardCoins]);
+
+                        try {
+                            $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
+                            $log->execute([$userId, $rewardCoins, "Redeemed promo code: {$inputCode}"]);
+                        } catch (Exception $eLog) {}
+
+                        $pdo->commit();
+
+                        $redeemAlert = [
+                            'type' => 'emerald',
+                            'message' => "🎉 Tagumpay! Nakuha mo ang +{$rewardCoins} Flow Coins mula sa code na {$inputCode}!"
+                        ];
+                    }
+                }
+            } catch (Exception $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $redeemAlert = ['type' => 'rose', 'message' => 'Hindi ma-proseso ang redeem code: ' . $e->getMessage()];
+            }
+        }
+    }
+
+    // 2. Check-in
+    elseif ($act === 'checkin') {
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to claim daily bonus!'];
+        } else {
+            $today = date('Y-m-d');
+            $uRew = $pdo->prepare("SELECT * FROM `user_rewards` WHERE `user_id` = ?");
+            $uRew->execute([$userId]);
+            $row = $uRew->fetch();
+
+            if ($row && $row['last_checkin_date'] === $today) {
+                $redeemAlert = ['type' => 'amber', 'message' => 'Naka-check in ka na ngayong araw! Magbalik bukas para sa susunod na reward.'];
+            } else {
+                $yesterday = date('Y-m-d', strtotime('-1 day'));
+                $newStreak = 1;
+                if ($row && $row['last_checkin_date'] === $yesterday) {
+                    $newStreak = ($row['streak_days'] % 7) + 1;
+                }
+                $streakRewards = [1 => 10, 2 => 15, 3 => 20, 4 => 25, 5 => 30, 6 => 40, 7 => 60];
+                $earnedCoins = $streakRewards[$newStreak] ?? 10;
+
+                $pdo->prepare("
+                    INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `streak_days`, `last_checkin_date`) 
+                    VALUES (?, ?, ?, ?, ?) 
+                    ON DUPLICATE KEY UPDATE 
+                        `coins` = `coins` + ?, 
+                        `total_earned` = `total_earned` + ?, 
+                        `streak_days` = ?, 
+                        `last_checkin_date` = ?
+                ")->execute([$userId, $earnedCoins, $earnedCoins, $newStreak, $today, $earnedCoins, $earnedCoins, $newStreak, $today]);
+
+                try {
+                    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'checkin', ?, ?)");
+                    $log->execute([$userId, $earnedCoins, "Day {$newStreak} Daily Check-In Bonus"]);
+                } catch (Exception $eLog) {}
+
+                $redeemAlert = [
+                    'type' => 'emerald',
+                    'message' => "🎉 Tagumpay! Nakuha mo ang Day {$newStreak} login bonus na +{$earnedCoins} Flow Coins!"
+                ];
+            }
+        }
+    }
+
+    // 3. Watch Daily Ad
+    elseif ($act === 'watch_ad') {
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to watch daily ads!'];
+        } else {
+            $today = date('Y-m-d');
+            $uRew = $pdo->prepare("SELECT * FROM `user_rewards` WHERE `user_id` = ?");
+            $uRew->execute([$userId]);
+            $row = $uRew->fetch();
+            $lastAdDate = $row['last_ad_date'] ?? null;
+            $currentCount = ($row && $lastAdDate === $today) ? intval($row['ads_watched_today'] ?? 0) : 0;
+
+            if ($currentCount >= 5) {
+                $redeemAlert = ['type' => 'amber', 'message' => 'Kumpleto na ang 5/5 daily ads mo ngayong araw! Magre-reset ito bukas ng hatinggabi.'];
+            } else {
+                $newCount = $currentCount + 1;
+                $earnedCoins = ($newCount === 5) ? 50 : 20;
+
+                $pdo->prepare("
+                    INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `ads_watched_today`, `last_ad_date`) 
+                    VALUES (?, ?, ?, ?, ?) 
+                    ON DUPLICATE KEY UPDATE 
+                        `coins` = `coins` + ?, 
+                        `total_earned` = `total_earned` + ?, 
+                        `ads_watched_today` = ?, 
+                        `last_ad_date` = ?
+                ")->execute([$userId, $earnedCoins, $earnedCoins, $newCount, $today, $earnedCoins, $earnedCoins, $newCount, $today]);
+
+                try {
+                    $logDesc = "Daily Ad Watch ({$newCount}/5)" . ($newCount === 5 ? " + Completion Bonus" : "");
+                    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'ad_watch', ?, ?)");
+                    $log->execute([$userId, $earnedCoins, $logDesc]);
+                } catch (Exception $eLog) {}
+
+                $msg = ($newCount === 5)
+                    ? "🎉 Kumpleto ang 5/5 ads quest! +{$earnedCoins} Coins credited (kasama ang completion bonus)!"
+                    : "🎉 Napanood mo ang ad {$newCount}/5! +{$earnedCoins} Flow Coins naidagdag sa iyong balance.";
+
+                $redeemAlert = [
+                    'type' => 'emerald',
+                    'message' => $msg,
+                    'open_url' => 'https://uplcm.com/4/11983803'
+                ];
+            }
+        }
+    }
+
+    // 4. Daily Sponsor Quest
+    elseif ($act === 'sponsor_quest') {
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to claim daily sponsor bonus!'];
+        } else {
+            $today = date('Y-m-d');
+            $uRew = $pdo->prepare("SELECT * FROM `user_rewards` WHERE `user_id` = ?");
+            $uRew->execute([$userId]);
+            $row = $uRew->fetch();
+
+            if ($row && $row['last_sponsor_date'] === $today) {
+                $redeemAlert = [
+                    'type' => 'amber', 
+                    'message' => 'Na-claim mo na ang Daily Sponsor Bonus ngayong araw! Magbalik bukas para sa panibagong +50 coins.',
+                    'open_url' => 'https://uplcm.com/4/11983803'
+                ];
+            } else {
+                $earnedCoins = 50;
+                $pdo->prepare("
+                    INSERT INTO `user_rewards` (`user_id`, `coins`, `total_earned`, `last_sponsor_date`) 
+                    VALUES (?, ?, ?, ?) 
+                    ON DUPLICATE KEY UPDATE 
+                        `coins` = `coins` + ?, 
+                        `total_earned` = `total_earned` + ?, 
+                        `last_sponsor_date` = ?
+                ")->execute([$userId, $earnedCoins, $earnedCoins, $today, $earnedCoins, $earnedCoins, $today]);
+
+                try {
+                    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'sponsor_offer', ?, ?)");
+                    $log->execute([$userId, $earnedCoins, "Daily Partner Sponsor Exploration"]);
+                } catch (Exception $eLog) {}
+
+                $redeemAlert = [
+                    'type' => 'emerald',
+                    'message' => "🎉 Tagumpay! Nakuha mo ang +{$earnedCoins} Flow Coins mula sa Daily Sponsor Offer!",
+                    'open_url' => 'https://uplcm.com/4/11983803'
+                ];
+            }
+        }
+    }
+
+    // 5. Save Payout Settings
+    elseif ($act === 'save_payout_settings') {
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first!'];
+        } else {
+            $method = trim($_POST['default_payout_method'] ?? 'gcash');
+            $name = trim($_POST['default_account_name'] ?? '');
+            $number = trim($_POST['default_account_number'] ?? '');
+            $pdo->prepare("
+                INSERT INTO `user_rewards` (`user_id`, `default_payout_method`, `default_account_name`, `default_account_number`) 
+                VALUES (?, ?, ?, ?) 
+                ON DUPLICATE KEY UPDATE 
+                    `default_payout_method` = VALUES(`default_payout_method`), 
+                    `default_account_name` = VALUES(`default_account_name`), 
+                    `default_account_number` = VALUES(`default_account_number`)
+            ")->execute([$userId, $method, $name, $number]);
+            $redeemAlert = ['type' => 'emerald', 'message' => 'Na-save na ang iyong payout account details!'];
+        }
+    }
+
+    // 6. Request Payout
+    elseif ($act === 'request_payout') {
+        if (!$userId) {
+            $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to request a payout!'];
+        } else {
+            $amountPhp = intval($_POST['amount_php'] ?? 0);
+            $method = trim($_POST['payout_method'] ?? 'gcash');
+            $name = trim($_POST['account_name'] ?? '');
+            $number = trim($_POST['account_number'] ?? '');
+
+            $rates = [10 => 2500, 25 => 5000, 50 => 10000, 100 => 20000];
+            if (!isset($rates[$amountPhp])) {
+                $redeemAlert = ['type' => 'rose', 'message' => 'Invalid cashout amount selected.'];
+            } elseif (empty($name) || empty($number)) {
+                $redeemAlert = ['type' => 'rose', 'message' => 'Please fill in your account name and mobile number.'];
+            } else {
+                $costCoins = $rates[$amountPhp];
+                $uRew = $pdo->prepare("SELECT `coins` FROM `user_rewards` WHERE `user_id` = ?");
+                $uRew->execute([$userId]);
+                $currentCoins = intval($uRew->fetchColumn());
+
+                if ($currentCoins < $costCoins) {
+                    $redeemAlert = ['type' => 'rose', 'message' => "Kulang ang iyong coins! Kailangan mo ng " . number_format($costCoins) . " coins para sa ₱{$amountPhp}.00."];
+                } else {
                     $pdo->beginTransaction();
+                    $deduct = $pdo->prepare("UPDATE `user_rewards` SET `coins` = `coins` - ? WHERE `user_id` = ? AND `coins` >= ?");
+                    $deduct->execute([$costCoins, $userId, $costCoins]);
 
-                    $insRedeem = $pdo->prepare("INSERT INTO `user_redeemed_codes` (`user_id`, `code_id`, `coins_awarded`) VALUES (?, ?, ?)");
-                    $insRedeem->execute([$userId, $codeRow['id'], $rewardCoins]);
-
-                    $upCode = $pdo->prepare("UPDATE `redeem_codes` SET `used_count` = `used_count` + 1 WHERE `id` = ?");
-                    $upCode->execute([$codeRow['id']]);
-
-                    $upUser = $pdo->prepare("UPDATE `user_rewards` SET `coins` = `coins` + ?, `total_earned` = `total_earned` + ? WHERE `user_id` = ?");
-                    $upUser->execute([$rewardCoins, $rewardCoins, $userId]);
-
-                    try {
-                        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
-                        $log->execute([$userId, $rewardCoins, "Redeemed promo code: {$inputCode}"]);
-                    } catch (Exception $eLog) {}
-
+                    $req = $pdo->prepare("
+                        INSERT INTO `payout_requests` (`user_id`, `amount_php`, `coins_deducted`, `payout_method`, `account_name`, `account_number`, `status`) 
+                        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                    ");
+                    $req->execute([$userId, $amountPhp, $costCoins, $method, $name, $number]);
                     $pdo->commit();
 
                     $redeemAlert = [
                         'type' => 'emerald',
-                        'message' => "🎉 Tagumpay! Nakuha mo ang +{$rewardCoins} Flow Coins mula sa code na {$inputCode}!"
+                        'message' => "🎉 Tagumpay! Naisumite ang iyong cashout request para sa ₱{$amountPhp}.00! Ipapadala ang payout sa loob ng 24-48 oras."
                     ];
                 }
             }
-        } catch (Exception $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            $redeemAlert = ['type' => 'rose', 'message' => 'Hindi ma-proseso ang redeem code: ' . $e->getMessage()];
         }
     }
 }
@@ -138,6 +342,13 @@ $rankData = calcRank($totalEarned);
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
+        <?php if (!empty($redeemAlert['open_url'])): ?>
+            <script>
+                window.addEventListener('DOMContentLoaded', function() {
+                    window.open('<?= htmlspecialchars($redeemAlert['open_url'], ENT_QUOTES, 'UTF-8') ?>', '_blank');
+                });
+            </script>
+        <?php endif; ?>
     <?php endif; ?>
 
     <!-- Header Banner -->
@@ -239,11 +450,14 @@ $rankData = calcRank($totalEarned);
         <div class="pt-2 text-center sm:text-left">
             <?php if ($userId): ?>
                 <?php if ($canCheckin): ?>
-                    <button onclick="claimCheckin()" id="btn-checkin"
-                            class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-xl shadow-emerald-950/30 transition-all inline-flex items-center gap-2">
-                        <i class="fa-solid fa-gift"></i>
-                        <span>Claim Today's Login Bonus</span>
-                    </button>
+                    <form method="POST" action="rewards.php" class="inline">
+                        <input type="hidden" name="action" value="checkin">
+                        <button type="submit" id="btn-checkin"
+                                class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-xl shadow-emerald-950/30 transition-all inline-flex items-center gap-2">
+                            <i class="fa-solid fa-gift"></i>
+                            <span>Claim Today's Login Bonus</span>
+                        </button>
+                    </form>
                 <?php else: ?>
                     <button disabled class="px-6 py-3 rounded-xl bg-dark-850 border border-dark-750 text-slate-500 font-bold text-sm cursor-not-allowed inline-flex items-center gap-2">
                         <i class="fa-solid fa-circle-check text-emerald-500"></i>
@@ -301,11 +515,14 @@ $rankData = calcRank($totalEarned);
                 <div>
                     <?php if ($userId): ?>
                         <?php if ($canWatchAd): ?>
-                            <button onclick="watchDailyAd()" id="btn-watch-ad"
-                                    class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-play text-[10px]"></i>
-                                <span>Watch Ad (<?= $adsWatchedToday ?>/5)</span>
-                            </button>
+                            <form method="POST" action="rewards.php">
+                                <input type="hidden" name="action" value="watch_ad">
+                                <button type="submit" id="btn-watch-ad"
+                                        class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-play text-[10px]"></i>
+                                    <span>Watch Ad (<?= $adsWatchedToday ?>/5)</span>
+                                </button>
+                            </form>
                         <?php else: ?>
                             <button disabled class="w-full py-2.5 px-4 rounded-xl bg-dark-850 text-slate-500 text-xs font-bold border border-dark-750 cursor-not-allowed">
                                 <i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> Completed (5/5 Today!)
@@ -339,11 +556,14 @@ $rankData = calcRank($totalEarned);
                 <div class="pt-6">
                     <?php if ($userId): ?>
                         <?php if ($canSponsor): ?>
-                            <button onclick="claimSponsorQuest()" id="btn-sponsor-quest"
-                                    class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-brand-600/30 transition-all flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                                <span>Claim +50 Coins (Visit Offer)</span>
-                            </button>
+                            <form method="POST" action="rewards.php">
+                                <input type="hidden" name="action" value="sponsor_quest">
+                                <button type="submit" id="btn-sponsor-quest"
+                                        class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-brand-600/30 transition-all flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                    <span>Claim +50 Coins (Visit Offer)</span>
+                                </button>
+                            </form>
                         <?php else: ?>
                             <button disabled class="w-full py-2.5 px-4 rounded-xl bg-dark-850 text-slate-500 text-xs font-bold border border-dark-750 cursor-not-allowed">
                                 <i class="fa-solid fa-check text-emerald-500 mr-1"></i> Claimed Today!
@@ -526,10 +746,11 @@ $rankData = calcRank($totalEarned);
             </div>
         </div>
 
-        <form id="payout-settings-form" onsubmit="savePayoutSettings(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+        <form id="payout-settings-form" method="POST" action="rewards.php" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <input type="hidden" name="action" value="save_payout_settings">
             <div>
                 <label class="block text-[11px] font-bold text-slate-400 mb-1">Preferred Method</label>
-                <select id="setting-method" class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+                <select name="default_payout_method" id="setting-method" class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
                     <option value="gcash" <?= $defaultMethod === 'gcash' ? 'selected' : '' ?>>GCash</option>
                     <option value="maya" <?= $defaultMethod === 'maya' ? 'selected' : '' ?>>Maya (PayMaya)</option>
                     <option value="load" <?= $defaultMethod === 'load' ? 'selected' : '' ?>>Prepaid Load</option>
@@ -537,13 +758,13 @@ $rankData = calcRank($totalEarned);
             </div>
             <div>
                 <label class="block text-[11px] font-bold text-slate-400 mb-1">Account Full Name</label>
-                <input type="text" id="setting-name" value="<?= htmlspecialchars($defaultName) ?>" required placeholder="e.g. Maria Santos"
+                <input type="text" name="default_account_name" id="setting-name" value="<?= htmlspecialchars($defaultName) ?>" required placeholder="e.g. Maria Santos"
                        class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
             </div>
             <div>
                 <label class="block text-[11px] font-bold text-slate-400 mb-1">Mobile / Account Number</label>
                 <div class="flex gap-2">
-                    <input type="text" id="setting-number" value="<?= htmlspecialchars($defaultNumber) ?>" required placeholder="e.g. 09123456789"
+                    <input type="text" name="default_account_number" id="setting-number" value="<?= htmlspecialchars($defaultNumber) ?>" required placeholder="e.g. 09123456789"
                            class="w-full bg-dark-850 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500">
                     <button type="submit" id="btn-save-settings" 
                             class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-md transition-all">
@@ -752,12 +973,13 @@ $rankData = calcRank($totalEarned);
             </div>
         </div>
 
-        <form id="redeem-form" onsubmit="submitPayout(event)" class="space-y-4">
-            <input type="hidden" id="payout-amount" value="0">
+        <form id="redeem-form" method="POST" action="rewards.php" class="space-y-4">
+            <input type="hidden" name="action" value="request_payout">
+            <input type="hidden" id="payout-amount" name="amount_php" value="0">
 
             <div>
                 <label class="block text-xs font-bold text-slate-300 mb-1.5">Payment Method</label>
-                <select id="payout-method" class="w-full bg-dark-850 border border-dark-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+                <select name="payout_method" id="payout-method" class="w-full bg-dark-850 border border-dark-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
                     <option value="gcash">GCash</option>
                     <option value="maya">Maya (PayMaya)</option>
                     <option value="load">Regular Prepaid Load</option>
@@ -766,13 +988,13 @@ $rankData = calcRank($totalEarned);
 
             <div>
                 <label class="block text-xs font-bold text-slate-300 mb-1.5">Account / Full Name</label>
-                <input type="text" id="payout-name" required placeholder="e.g. Juan Dela Cruz"
+                <input type="text" name="account_name" id="payout-name" required placeholder="e.g. Juan Dela Cruz"
                        class="w-full bg-dark-850 border border-dark-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500">
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-300 mb-1.5">Mobile Number</label>
-                <input type="text" id="payout-number" required placeholder="e.g. 09123456789"
+                <input type="text" name="account_number" id="payout-number" required placeholder="e.g. 09123456789"
                        class="w-full bg-dark-850 border border-dark-700 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500">
             </div>
 
@@ -785,131 +1007,7 @@ $rankData = calcRank($totalEarned);
 </div>
 
 <script>
-// 1. Watch Daily Ad (0/5 Quests)
-async function watchDailyAd() {
-    const btn = document.getElementById('btn-watch-ad');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Loading Ad...';
-    }
-
-    try {
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=watch_ad', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-            // Open sponsored ad link
-            if (data.sponsor_url) {
-                window.open(data.sponsor_url, '_blank');
-            }
-            alert(data.message);
-            window.location.reload();
-        } else {
-            alert(data.message);
-        }
-    } catch(e) {
-        alert('Could not record ad watch. Please check your connection and try again.');
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-// 2. Submit Monthly Redeem Code (Native POST with loading feedback)
-document.addEventListener('DOMContentLoaded', function() {
-    const redeemForm = document.querySelector('form[action*="rewards.php"] input[name="action"][value="redeem_code"]')?.closest('form');
-    if (redeemForm) {
-        redeemForm.addEventListener('submit', function() {
-            const btn = document.getElementById('btn-submit-code');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Processing Code...';
-            }
-        });
-    }
-});
-
-// Check-In API call
-async function claimCheckin() {
-    const btn = document.getElementById('btn-checkin');
-    if (btn) btn.disabled = true;
-
-    try {
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=checkin', { method: 'POST' });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-            window.location.reload();
-        }
-    } catch(e) {
-        alert('Something went wrong. Please try again.');
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-// Sponsor Quest API call (Monetag Link)
-async function claimSponsorQuest() {
-    const btn = document.getElementById('btn-sponsor-quest');
-    if (btn) btn.disabled = true;
-
-    try {
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=sponsor_quest', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-            // Open Monetag direct link in new tab
-            window.open(data.sponsor_url, '_blank');
-            alert(data.message);
-            window.location.reload();
-        } else {
-            alert(data.message);
-        }
-    } catch(e) {
-        alert('Something went wrong. Please try again.');
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-// Save Payout Settings Form
-async function savePayoutSettings(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-save-settings');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Saving...';
-    }
-
-    const method = document.getElementById('setting-method').value;
-    const name = document.getElementById('setting-name').value;
-    const number = document.getElementById('setting-number').value;
-
-    try {
-        const formData = new URLSearchParams();
-        formData.append('csrf_token', '<?= getCsrfToken() ?>');
-        formData.append('default_payout_method', method);
-        formData.append('default_account_name', name);
-        formData.append('default_account_number', number);
-
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=save_payout_settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData.toString()
-        });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-            window.location.reload();
-        }
-    } catch(err) {
-        alert('Problem saving settings. Please try again.');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Save';
-        }
-    }
-}
-
-// Modal controls
+// Modal controls for GCash/Maya Cashout
 function openRedeemModal(amount, coins) {
     const userCoins = <?= $coins ?>;
     if (userCoins < coins) {
@@ -935,44 +1033,44 @@ function closeRedeemModal() {
     document.getElementById('redeem-modal').classList.add('hidden');
 }
 
-// Submit Payout Request
-async function submitPayout(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-submit-payout');
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-
-    const amount = document.getElementById('payout-amount').value;
-    const method = document.getElementById('payout-method').value;
-    const name = document.getElementById('payout-name').value;
-    const number = document.getElementById('payout-number').value;
-
-    try {
-        const formData = new URLSearchParams();
-        formData.append('csrf_token', '<?= getCsrfToken() ?>');
-        formData.append('amount_php', amount);
-        formData.append('payout_method', method);
-        formData.append('account_name', name);
-        formData.append('account_number', number);
-
-        const res = await fetch('<?= BASE_URL ?>api/rewards.php?action=request_payout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData.toString()
+// Add native submit spinners for smooth user feedback
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Redeem Code Form
+    const redeemCodeForm = document.querySelector('form[action*="rewards.php"] input[name="action"][value="redeem_code"]')?.closest('form');
+    if (redeemCodeForm) {
+        redeemCodeForm.addEventListener('submit', function() {
+            const btn = document.getElementById('btn-submit-code');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Processing Code...';
+            }
         });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-            closeRedeemModal();
-            window.location.reload();
-        }
-    } catch(err) {
-        alert('Network error while submitting payout request.');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Confirm Cashout Request';
     }
-}
+
+    // 2. Payout Request Form
+    const payoutForm = document.getElementById('redeem-form');
+    if (payoutForm) {
+        payoutForm.addEventListener('submit', function() {
+            const btn = document.getElementById('btn-submit-payout');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Submitting Cashout...';
+            }
+        });
+    }
+
+    // 3. Payout Settings Form
+    const settingsForm = document.getElementById('payout-settings-form');
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', function() {
+            const btn = document.getElementById('btn-save-settings');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> Saving...';
+            }
+        });
+    }
+});
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
