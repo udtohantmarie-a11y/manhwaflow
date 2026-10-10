@@ -95,7 +95,7 @@ if ($userId) {
                              alt="<?= htmlspecialchars($item['series_title']) ?>" 
                              referrerpolicy="no-referrer"
                              loading="lazy"
-                             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
+                             onerror="this.onerror=null; this.src='<?= BASE_URL ?>assets/images/placeholder.svg';"
                              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                     </a>
 

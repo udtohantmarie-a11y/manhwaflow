@@ -1111,10 +1111,37 @@ class ChaptersFallback {
             $title = html_entity_decode(trim(strip_tags($tm[1])), ENT_QUOTES | ENT_HTML5);
         }
 
-        // Cover
+        // Cover (Anisascans.in direct images are blocked with 403, resolve to verified CDN or MangaDex)
         $cover = '';
         if (preg_match('/<div class="summary_image"[^>]*>[\s\S]*?<img[^>]+src="([^">]+)"/i', $html, $cm)) {
             $cover = trim($cm[1]);
+        }
+
+        // Priority 1: Match against verified Exclusive Spotlight list
+        $spotlight = self::getExclusiveSpotlight();
+        foreach ($spotlight as $sp) {
+            if ($sp['slug'] === $slug || $sp['id'] === "anisa_{$slug}" || strcasecmp($sp['title'], $title) === 0) {
+                if (!empty($sp['cover_url']) && !str_contains($sp['cover_url'], 'anisascans.in')) {
+                    $cover = $sp['cover_url'];
+                    break;
+                }
+            }
+        }
+
+        // Priority 2: If still anisascans.in or empty, search MangaDex
+        if (empty($cover) || str_contains($cover, 'anisascans.in')) {
+            $cleanTitle = preg_replace('/[’\']/u', '', $title);
+            $cleanTitle = trim(preg_replace('/\s+/', ' ', $cleanTitle));
+            if (class_exists('MangaDexAPI')) {
+                $mdMatch = MangaDexAPI::search($cleanTitle, 1);
+                if (!empty($mdMatch[0]['cover_url'])) {
+                    $cover = $mdMatch[0]['cover_url'];
+                }
+            }
+        }
+
+        if (empty($cover) || str_contains($cover, 'anisascans.in')) {
+            $cover = (defined('BASE_URL') ? BASE_URL : '/') . 'assets/images/placeholder.svg';
         }
 
         // Synopsis

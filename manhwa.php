@@ -43,6 +43,29 @@ if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || s
 
     $coverUrl = $sourceData['cover_url'] ?? '';
 
+    // Priority 1: Match against verified Exclusive Spotlight list
+    $spotlight = ChaptersFallback::getExclusiveSpotlight();
+    foreach ($spotlight as $sp) {
+        if ($sp['id'] === $rawId || $sp['slug'] === $sourceSlug || strcasecmp($sp['title'], $sourceData['title']) === 0) {
+            if (!empty($sp['cover_url']) && !str_contains($sp['cover_url'], 'anisascans.in')) {
+                $coverUrl = $sp['cover_url'];
+                break;
+            }
+        }
+    }
+
+    // Priority 2: If cover contains anisascans.in (blocked by Cloudflare 403) or is empty, resolve via MangaDex
+    if (empty($coverUrl) || str_contains($coverUrl, 'anisascans.in')) {
+        $cleanSearchTitle = preg_replace('/[’\']/u', '', $sourceData['title']);
+        $cleanSearchTitle = trim(preg_replace('/\s+/', ' ', $cleanSearchTitle));
+        $mdMatch = MangaDexAPI::search($cleanSearchTitle, 1);
+        if (!empty($mdMatch[0]['cover_url'])) {
+            $coverUrl = $mdMatch[0]['cover_url'];
+        } else {
+            $coverUrl = BASE_URL . 'assets/images/placeholder.svg';
+        }
+    }
+
     $manhwa = [
         'id' => $rawId,
         'title' => $sourceData['title'],
@@ -233,7 +256,7 @@ require_once __DIR__ . '/includes/header.php';
         <img src="<?= htmlspecialchars($manhwa['banner_image']) ?>" 
              alt="<?= htmlspecialchars($manhwa['title']) ?>" 
              referrerpolicy="no-referrer"
-             onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
+             onerror="this.onerror=null; this.src='<?= BASE_URL ?>assets/images/placeholder.svg';"
              class="w-full h-full object-cover opacity-25 blur-md scale-105">
         <div class="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/70 to-transparent"></div>
     </div>
@@ -257,7 +280,7 @@ require_once __DIR__ . '/includes/header.php';
                     <img src="<?= htmlspecialchars($manhwa['cover_image']) ?>" 
                          alt="<?= htmlspecialchars($manhwa['title']) ?>" 
                          referrerpolicy="no-referrer"
-                         onerror="this.onerror=null; this.src='https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp';"
+                         onerror="this.onerror=null; this.src='<?= BASE_URL ?>assets/images/placeholder.svg';"
                          class="w-full h-full object-cover">
                 </div>
 
@@ -467,6 +490,8 @@ require_once __DIR__ . '/includes/header.php';
                                 <div class="aspect-[2/3] rounded-lg overflow-hidden bg-dark-950 mb-2">
                                     <img src="<?= htmlspecialchars($rm['cover_image']) ?>" 
                                          alt="<?= htmlspecialchars($rm['title']) ?>" 
+                                         referrerpolicy="no-referrer"
+                                         onerror="this.onerror=null; this.src='<?= BASE_URL ?>assets/images/placeholder.svg';"
                                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                                 </div>
                                 <h4 class="font-bold text-xs text-slate-200 group-hover:text-brand-400 line-clamp-1">
