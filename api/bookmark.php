@@ -3,6 +3,8 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/chapters_fallback.php';
+require_once __DIR__ . '/../includes/mangadex.php';
 startSecureSession();
 $pdo = getPdo();
 
@@ -59,6 +61,7 @@ if ($action === 'toggle') {
     $seriesId = trim($data['id'] ?? ($data['series_id'] ?? ''));
     $title = trim($data['title'] ?? '');
     $cover = trim($data['cover_image'] ?? ($data['cover'] ?? ''));
+    $cover = ChaptersFallback::resolveCover($seriesId, $title, $cover);
     $status = trim($data['status'] ?? 'Ongoing');
     $rating = floatval($data['rating'] ?? 4.8);
 
@@ -111,6 +114,7 @@ if ($action === 'sync_guest') {
             $seriesId = trim($item['id'] ?? ($item['series_id'] ?? ''));
             $title = trim($item['title'] ?? '');
             $cover = trim($item['cover_image'] ?? ($item['cover'] ?? ''));
+            $cover = ChaptersFallback::resolveCover($seriesId, $title, $cover);
             $status = trim($item['status'] ?? 'Ongoing');
             $rating = floatval($item['rating'] ?? 4.8);
 

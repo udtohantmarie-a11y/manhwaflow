@@ -24,33 +24,36 @@ if ($isLive) {
         $athreaSlug = substr($mdMangaId, 7);
         $mangaDetails = ChaptersFallback::getAthreaDetails($athreaSlug);
         $liveChapters = ChaptersFallback::getAthreaChapters($athreaSlug, 1000);
+        $coverUrl = ChaptersFallback::resolveCover($mdMangaId, $mangaDetails['title'] ?? '', $mangaDetails['cover_url'] ?? '');
 
         $manga = [
             'id' => $mdMangaId,
             'title' => $mangaDetails['title'] ?? 'Webtoon Series',
-            'cover_url' => $mangaDetails['cover_url'] ?? ''
+            'cover_url' => $coverUrl
         ];
     } elseif (str_starts_with($mdMangaId, 'asura_')) {
         require_once __DIR__ . '/includes/chapters_fallback.php';
         $asuraSlug = substr($mdMangaId, 6);
         $mangaDetails = ChaptersFallback::getAsuraDetails($asuraSlug);
         $liveChapters = ChaptersFallback::getAsuraChapters($asuraSlug, 1000);
+        $coverUrl = ChaptersFallback::resolveCover($mdMangaId, $mangaDetails['title'] ?? '', $mangaDetails['cover_url'] ?? '');
 
         $manga = [
             'id' => $mdMangaId,
             'title' => $mangaDetails['title'] ?? 'Webtoon Series',
-            'cover_url' => $mangaDetails['cover_url'] ?? ''
+            'cover_url' => $coverUrl
         ];
     } elseif (str_starts_with($mdMangaId, 'anisa_')) {
         require_once __DIR__ . '/includes/chapters_fallback.php';
         $anisaSlug = substr($mdMangaId, 6);
         $mangaDetails = ChaptersFallback::getAnisaDetails($anisaSlug);
         $liveChapters = ChaptersFallback::getAnisaChapters($anisaSlug, 1000);
+        $coverUrl = ChaptersFallback::resolveCover($mdMangaId, $mangaDetails['title'] ?? '', $mangaDetails['cover_url'] ?? '');
 
         $manga = [
             'id' => $mdMangaId,
             'title' => $mangaDetails['title'] ?? 'Webtoon Series',
-            'cover_url' => $mangaDetails['cover_url'] ?? ''
+            'cover_url' => $coverUrl
         ];
     } else {
         $manga = MangaDexAPI::getMangaDetailsLive($mdMangaId);
@@ -218,7 +221,7 @@ try {
         $userToken,
         strval($chapter['manhwa_id']),
         $chapter['manhwa_title'],
-        $chapter['cover_image'],
+        ChaptersFallback::resolveCover(strval($chapter['manhwa_id']), $chapter['manhwa_title'], $chapter['cover_image']),
         strval($chapter['id']),
         floatval($chapter['chapter_number']),
         $chapter['title'] ?: ('Chapter ' . $chapter['chapter_number']),

@@ -43,28 +43,7 @@ if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || s
 
     $coverUrl = $sourceData['cover_url'] ?? '';
 
-    // Priority 1: Match against verified Exclusive Spotlight list
-    $spotlight = ChaptersFallback::getExclusiveSpotlight();
-    foreach ($spotlight as $sp) {
-        if ($sp['id'] === $rawId || $sp['slug'] === $sourceSlug || strcasecmp($sp['title'], $sourceData['title']) === 0) {
-            if (!empty($sp['cover_url']) && !str_contains($sp['cover_url'], 'anisascans.in')) {
-                $coverUrl = $sp['cover_url'];
-                break;
-            }
-        }
-    }
-
-    // Priority 2: If cover contains anisascans.in (blocked by Cloudflare 403) or is empty, resolve via MangaDex
-    if (empty($coverUrl) || str_contains($coverUrl, 'anisascans.in')) {
-        $cleanSearchTitle = preg_replace('/[’\']/u', '', $sourceData['title']);
-        $cleanSearchTitle = trim(preg_replace('/\s+/', ' ', $cleanSearchTitle));
-        $mdMatch = MangaDexAPI::search($cleanSearchTitle, 1);
-        if (!empty($mdMatch[0]['cover_url'])) {
-            $coverUrl = $mdMatch[0]['cover_url'];
-        } else {
-            $coverUrl = BASE_URL . 'assets/images/placeholder.svg';
-        }
-    }
+    $coverUrl = ChaptersFallback::resolveCover($rawId, $sourceData['title'], $sourceData['cover_url'] ?? '');
 
     $manhwa = [
         'id' => $rawId,

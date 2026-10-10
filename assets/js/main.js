@@ -37,7 +37,34 @@ const GUEST_BM_KEY = 'mf_bookmarks';
 function getLocalBookmarks() {
     try {
         const raw = localStorage.getItem(GUEST_BM_KEY);
-        return raw ? JSON.parse(raw) : [];
+        const list = raw ? JSON.parse(raw) : [];
+        const KNOWN_FIXES = {
+            'anisa_genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'anisa_overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
+            'overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg'
+        };
+        let modified = false;
+        list.forEach(b => {
+            const sid = String(b.id || b.series_id || '');
+            const clean = sid.replace(/^(anisa_|asura_|athrea_)/, '');
+            const c = b.cover_image || b.cover || '';
+            if (!c || c.includes('anisascans.in') || c.includes('placeholder.svg')) {
+                if (KNOWN_FIXES[sid]) {
+                    b.cover_image = KNOWN_FIXES[sid];
+                    b.cover = KNOWN_FIXES[sid];
+                    modified = true;
+                } else if (KNOWN_FIXES[clean]) {
+                    b.cover_image = KNOWN_FIXES[clean];
+                    b.cover = KNOWN_FIXES[clean];
+                    modified = true;
+                }
+            }
+        });
+        if (modified) {
+            localStorage.setItem(GUEST_BM_KEY, JSON.stringify(list));
+        }
+        return list;
     } catch (e) {
         return [];
     }
@@ -64,12 +91,26 @@ function toggleLocalBookmark(item) {
         list.splice(idx, 1);
         bookmarked = false;
     } else {
+        let cover = item.cover_image || item.cover || '';
+        const KNOWN_FIXES = {
+            'anisa_genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'anisa_overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
+            'overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg'
+        };
+        const clean = id.replace(/^(anisa_|asura_|athrea_)/, '');
+        if (!cover || cover.includes('anisascans.in') || cover.includes('placeholder.svg')) {
+            if (KNOWN_FIXES[id]) cover = KNOWN_FIXES[id];
+            else if (KNOWN_FIXES[clean]) cover = KNOWN_FIXES[clean];
+        }
+
         list.unshift({
             id: id,
             series_id: id,
             title: item.title || 'Unknown Series',
             slug: item.slug || '',
-            cover_image: item.cover_image || item.cover || '',
+            cover_image: cover,
+            cover: cover,
             rating: item.rating || 4.8,
             status: item.status || 'Ongoing',
             saved_at: Date.now()

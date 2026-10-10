@@ -98,6 +98,30 @@ if ($userId) {
     } catch (PDOException $e) {}
 }
 
+// Auto-heal recent history covers
+if (!empty($recentHistory)) {
+    foreach ($recentHistory as &$rh) {
+        $currCover = $rh['cover_image'] ?? '';
+        $isBroken = empty($currCover) 
+            || str_contains($currCover, 'anisascans.in') 
+            || str_contains($currCover, 'placeholder.svg') 
+            || str_contains($currCover, 'placehold.co')
+            || !filter_var($currCover, FILTER_VALIDATE_URL);
+
+        if ($isBroken) {
+            $healed = ChaptersFallback::resolveCover($rh['series_id'], $rh['series_title'], $currCover);
+            if (!empty($healed) && !str_contains($healed, 'placeholder.svg') && $healed !== $currCover) {
+                $rh['cover_image'] = $healed;
+                try {
+                    $upd = $pdo->prepare("UPDATE `reading_history` SET `cover_image` = ? WHERE `id` = ?");
+                    $upd->execute([$healed, $rh['id']]);
+                } catch (Exception $e) {}
+            }
+        }
+    }
+    unset($rh);
+}
+
 // Hero spotlight series (Live Solo Leveling with authentic official artwork)
 $heroLive = MangaDexAPI::getMangaDetailsLive('32d76d19-8a05-4db0-9fc2-e0b0648fe9d0');
 $heroCover = !empty($heroLive['cover_url']) 

@@ -1460,4 +1460,125 @@ class ChaptersFallback {
 
         return [];
     }
+
+    /**
+     * Universal Cover Resolver and Self-Healer
+     * Heals broken covers, anisascans 403 hotlinking issues, and fallback placeholders.
+     */
+    public static function resolveCover($seriesId, $title = '', $currentCover = '') {
+        $trimmedCover = trim($currentCover);
+        $isBroken = empty($trimmedCover) 
+            || str_contains($trimmedCover, 'anisascans.in') 
+            || str_contains($trimmedCover, 'placeholder.svg') 
+            || str_contains($trimmedCover, 'placehold.co')
+            || !filter_var($trimmedCover, FILTER_VALIDATE_URL);
+
+        if (!$isBroken) {
+            return $trimmedCover;
+        }
+
+        $seriesId = trim($seriesId);
+        $title = trim($title);
+        $slug = preg_replace('/^(anisa_|asura_|athrea_)/', '', $seriesId);
+
+        // 1. Direct verified CDN mappings for known series
+        $knownDirect = [
+            'genius-archers-streaming' => 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'anisa_genius-archers-streaming' => 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+            'overgeared' => 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
+            'anisa_overgeared' => 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
+            'nano-machine' => 'https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp',
+            'asura_nano-machine' => 'https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp',
+            'return-of-the-mount-hua-sect' => 'https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.c0cbf9.webp',
+            'asura_return-of-the-mount-hua-sect' => 'https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.c0cbf9.webp',
+            'the-greatest-estate-developer' => 'https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.ad682d.webp',
+            'asura_the-greatest-estate-developer' => 'https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.ad682d.webp',
+            'revenge-of-the-iron-blooded-sword-hound' => 'https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.41b6fb.webp',
+            'asura_revenge-of-the-iron-blooded-sword-hound' => 'https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.41b6fb.webp',
+            'standard-of-reincarnation' => 'https://cdn.asurascans.com/asura-images/covers/standard-of-reincarnation.32ce34.webp',
+            'asura_standard-of-reincarnation' => 'https://cdn.asurascans.com/asura-images/covers/standard-of-reincarnation.32ce34.webp',
+            'solo-max-level-newbie' => 'https://cdn.asurascans.com/asura-images/covers/solo-max-level-newbie.bac83f.webp',
+            'asura_solo-max-level-newbie' => 'https://cdn.asurascans.com/asura-images/covers/solo-max-level-newbie.bac83f.webp',
+            'surviving-the-game-as-a-barbarian' => 'https://cdn.asurascans.com/asura-images/covers/surviving-the-game-as-a-barbarian.86af24.webp',
+            'asura_surviving-the-game-as-a-barbarian' => 'https://cdn.asurascans.com/asura-images/covers/surviving-the-game-as-a-barbarian.86af24.webp',
+            'pick-me-up-infinite-gacha' => 'https://cdn.asurascans.com/asura-images/covers/pick-me-up-infinite-gacha.3ebe61.webp',
+            'asura_pick-me-up-infinite-gacha' => 'https://cdn.asurascans.com/asura-images/covers/pick-me-up-infinite-gacha.3ebe61.webp',
+            'trembling-as-i-escape-from-you' => 'https://athreascans.com/wp-content/uploads/2026/07/mc38749-cover-225x300.webp',
+            'athrea_trembling-as-i-escape-from-you' => 'https://athreascans.com/wp-content/uploads/2026/07/mc38749-cover-225x300.webp',
+            'romance-saga-succubus-story' => 'https://athreascans.com/wp-content/uploads/2026/05/tall-1-225x300.jpg',
+            'athrea_romance-saga-succubus-story' => 'https://athreascans.com/wp-content/uploads/2026/05/tall-1-225x300.jpg'
+        ];
+
+        if (isset($knownDirect[$seriesId])) {
+            return $knownDirect[$seriesId];
+        }
+        if (isset($knownDirect[$slug])) {
+            return $knownDirect[$slug];
+        }
+        if (!empty($title)) {
+            $normTitle = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim($title)));
+            $normTitle = trim($normTitle, '-');
+            if (isset($knownDirect[$normTitle])) {
+                return $knownDirect[$normTitle];
+            }
+        }
+
+        // 2. Check spotlight
+        $spotlight = self::getExclusiveSpotlight(50);
+        foreach ($spotlight as $sp) {
+            $spSlug = $sp['slug'] ?? '';
+            $spId = $sp['id'] ?? '';
+            $spTitle = $sp['title'] ?? '';
+
+            if (
+                (!empty($spId) && $spId === $seriesId) ||
+                (!empty($spSlug) && ($spSlug === $slug || $spSlug === $seriesId)) ||
+                (!empty($title) && !empty($spTitle) && (strcasecmp($spTitle, $title) === 0 || self::isTitleMatch($spTitle, $title)))
+            ) {
+                if (!empty($sp['cover_url']) && !str_contains($sp['cover_url'], 'anisascans.in')) {
+                    return $sp['cover_url'];
+                }
+            }
+        }
+
+        // 3. MangaDex UUID lookup
+        if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $seriesId)) {
+            if (class_exists('MangaDexAPI')) {
+                $details = MangaDexAPI::getMangaDetailsLive($seriesId);
+                if (!empty($details['cover_url'])) {
+                    return $details['cover_url'];
+                }
+            }
+        }
+
+        // 4. Athrea lookup
+        if (str_starts_with($seriesId, 'athrea_')) {
+            $athreaData = self::getAthreaDetails($slug);
+            if (!empty($athreaData['cover_url']) && !str_contains($athreaData['cover_url'], 'anisascans.in')) {
+                return $athreaData['cover_url'];
+            }
+        }
+
+        // 5. Asura lookup
+        if (str_starts_with($seriesId, 'asura_')) {
+            $asuraData = self::getAsuraDetails($slug);
+            if (!empty($asuraData['cover_url']) && !str_contains($asuraData['cover_url'], 'anisascans.in')) {
+                return $asuraData['cover_url'];
+            }
+        }
+
+        // 6. Search MangaDex by title
+        if (!empty($title) && class_exists('MangaDexAPI')) {
+            $cleanSearchTitle = preg_replace('/[’\']/u', '', $title);
+            $cleanSearchTitle = trim(preg_replace('/\s+/', ' ', $cleanSearchTitle));
+            if (!empty($cleanSearchTitle)) {
+                $mdMatch = MangaDexAPI::search($cleanSearchTitle, 1);
+                if (!empty($mdMatch[0]['cover_url'])) {
+                    return $mdMatch[0]['cover_url'];
+                }
+            }
+        }
+
+        return (defined('BASE_URL') ? BASE_URL : '/') . 'assets/images/placeholder.svg';
+    }
 }

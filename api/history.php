@@ -3,6 +3,8 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/chapters_fallback.php';
+require_once __DIR__ . '/../includes/mangadex.php';
 startSecureSession();
 
 $pdo = getPdo();
@@ -36,6 +38,7 @@ if ($action === 'save') {
     $seriesId = trim($input['series_id'] ?? '');
     $seriesTitle = trim($input['series_title'] ?? 'Webtoon');
     $coverImage = trim($input['cover_image'] ?? '');
+    $coverImage = ChaptersFallback::resolveCover($seriesId, $seriesTitle, $coverImage);
     $chapterId = trim($input['chapter_id'] ?? '');
     $chapterNumber = floatval($input['chapter_number'] ?? 1);
     $chapterTitle = trim($input['chapter_title'] ?? ('Chapter ' . $chapterNumber));

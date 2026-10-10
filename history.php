@@ -1,6 +1,8 @@
 <?php
 // history.php - Reading History & Continue Reading Hub
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/chapters_fallback.php';
+require_once __DIR__ . '/includes/mangadex.php';
 $pdo = getPdo();
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -9,6 +11,22 @@ if (session_status() === PHP_SESSION_NONE) {
 
 $page_title = 'Reading History';
 require_once __DIR__ . '/includes/header.php';
+
+// Instant SQL self-heal for reading_history
+try {
+    $pdo->exec("
+        UPDATE reading_history 
+        SET cover_image = 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg' 
+        WHERE (series_id LIKE '%genius-archers-streaming%' OR series_title LIKE '%Genius Archer%')
+          AND (cover_image LIKE '%anisascans.in%' OR cover_image LIKE '%placeholder.svg%' OR cover_image IS NULL OR cover_image = '')
+    ");
+    $pdo->exec("
+        UPDATE reading_history 
+        SET cover_image = 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg' 
+        WHERE (series_id LIKE '%overgeared%' OR series_title LIKE '%Overgeared%')
+          AND (cover_image LIKE '%anisascans.in%' OR cover_image LIKE '%placeholder.svg%' OR cover_image IS NULL OR cover_image = '')
+    ");
+} catch (Exception $e) {}
 
 // Fetch history strictly isolated for this user or guest session
 $userId = $_SESSION['user_id'] ?? null;
@@ -38,6 +56,28 @@ if ($userId) {
         $historyItems = $stmt->fetchAll();
     } catch (PDOException $e) {}
 }
+
+// Universal auto-heal for reading_history covers
+foreach ($historyItems as &$hi) {
+    $currCover = $hi['cover_image'] ?? '';
+    $isBroken = empty($currCover) 
+        || str_contains($currCover, 'anisascans.in') 
+        || str_contains($currCover, 'placeholder.svg') 
+        || str_contains($currCover, 'placehold.co')
+        || !filter_var($currCover, FILTER_VALIDATE_URL);
+
+    if ($isBroken) {
+        $healed = ChaptersFallback::resolveCover($hi['series_id'], $hi['series_title'], $currCover);
+        if (!empty($healed) && !str_contains($healed, 'placeholder.svg') && $healed !== $currCover) {
+            $hi['cover_image'] = $healed;
+            try {
+                $upd = $pdo->prepare("UPDATE `reading_history` SET `cover_image` = ? WHERE `id` = ?");
+                $upd->execute([$healed, $hi['id']]);
+            } catch (Exception $e) {}
+        }
+    }
+}
+unset($hi);
 ?>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

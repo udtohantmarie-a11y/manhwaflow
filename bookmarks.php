@@ -1,6 +1,8 @@
 <?php
 // bookmarks.php - User Saved Bookmarks (Account Required)
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/chapters_fallback.php';
+require_once __DIR__ . '/includes/mangadex.php';
 $pdo = getPdo();
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -12,9 +14,47 @@ $userId = $isLoggedIn ? intval($_SESSION['user_id']) : 0;
 
 $userBookmarks = [];
 if ($isLoggedIn) {
+    // Instant SQL self-heal for known series
+    try {
+        $pdo->exec("
+            UPDATE user_bookmarks 
+            SET cover_image = 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg' 
+            WHERE (series_id LIKE '%genius-archers-streaming%' OR title LIKE '%Genius Archer%')
+              AND (cover_image LIKE '%anisascans.in%' OR cover_image LIKE '%placeholder.svg%' OR cover_image IS NULL OR cover_image = '')
+        ");
+        $pdo->exec("
+            UPDATE user_bookmarks 
+            SET cover_image = 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg' 
+            WHERE (series_id LIKE '%overgeared%' OR title LIKE '%Overgeared%')
+              AND (cover_image LIKE '%anisascans.in%' OR cover_image LIKE '%placeholder.svg%' OR cover_image IS NULL OR cover_image = '')
+        ");
+    } catch (Exception $e) {}
+
     $stmt = $pdo->prepare("SELECT * FROM user_bookmarks WHERE user_id = ? ORDER BY created_at DESC");
     $stmt->execute([$userId]);
     $userBookmarks = $stmt->fetchAll();
+
+    // Universal auto-heal for broken covers in bookmarks
+    foreach ($userBookmarks as &$bm) {
+        $currCover = $bm['cover_image'] ?? '';
+        $isBroken = empty($currCover) 
+            || str_contains($currCover, 'anisascans.in') 
+            || str_contains($currCover, 'placeholder.svg') 
+            || str_contains($currCover, 'placehold.co')
+            || !filter_var($currCover, FILTER_VALIDATE_URL);
+
+        if ($isBroken) {
+            $healed = ChaptersFallback::resolveCover($bm['series_id'], $bm['title'], $currCover);
+            if (!empty($healed) && !str_contains($healed, 'placeholder.svg') && $healed !== $currCover) {
+                $bm['cover_image'] = $healed;
+                try {
+                    $upd = $pdo->prepare("UPDATE user_bookmarks SET cover_image = ? WHERE id = ?");
+                    $upd->execute([$healed, $bm['id']]);
+                } catch (Exception $e) {}
+            }
+        }
+    }
+    unset($bm);
 }
 
 $page_title = 'My Bookmarks';
@@ -227,13 +267,45 @@ function renderGuestBookmarksView() {
     if (grid) grid.classList.remove('hidden');
     if (clearBtn) clearBtn.classList.remove('hidden');
 
+    const KNOWN_GUEST_COVERS = {
+        'anisa_genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+        'genius-archers-streaming': 'https://temp.compsci88.com/cover/fallback/01JXAC7MDTWPNM304YD9033CWJ.jpg',
+        'anisa_overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg',
+        'overgeared': 'https://temp.compsci88.com/cover/fallback/01J76XYDMR2777KEM5BKTBBK83.jpg'
+    };
+
+    let listChanged = false;
+    list.forEach(item => {
+        const sId = String(item.id || item.series_id || '');
+        const cleanId = sId.replace(/^(anisa_|asura_|athrea_)/, '');
+        let sCover = item.cover_image || item.cover || '';
+        if (!sCover || sCover.includes('anisascans.in') || sCover.includes('placeholder.svg') || sCover.includes('placehold.co')) {
+            if (KNOWN_GUEST_COVERS[sId]) {
+                item.cover_image = KNOWN_GUEST_COVERS[sId];
+                item.cover = KNOWN_GUEST_COVERS[sId];
+                listChanged = true;
+            } else if (KNOWN_GUEST_COVERS[cleanId]) {
+                item.cover_image = KNOWN_GUEST_COVERS[cleanId];
+                item.cover = KNOWN_GUEST_COVERS[cleanId];
+                listChanged = true;
+            }
+        }
+    });
+    if (listChanged && typeof saveLocalBookmarks === 'function') {
+        saveLocalBookmarks(list);
+    }
+
     grid.innerHTML = '';
     list.forEach(item => {
         const sId = item.id || item.series_id;
         const sTitle = item.title || 'Unknown Series';
-        const sCover = item.cover_image || item.cover || '';
+        let sCover = item.cover_image || item.cover || '';
         const sRating = Number(item.rating || 4.8).toFixed(1);
         const sUrl = '<?= BASE_URL ?>manhwa.php?id=' + encodeURIComponent(sId);
+
+        if (KNOWN_GUEST_COVERS[sId]) {
+            sCover = KNOWN_GUEST_COVERS[sId];
+        }
 
         const card = document.createElement('div');
         card.id = 'guest-card-' + sId;
@@ -245,7 +317,7 @@ function renderGuestBookmarksView() {
                 <i class="fa-solid fa-xmark"></i>
             </button>
             <a href="${sUrl}" class="relative aspect-[2/3] overflow-hidden bg-dark-950 block">
-                <img src="${sCover}" alt="${sTitle}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/400x600/18181b/ffffff?text=Cover'">
+                <img src="${sCover}" alt="${sTitle}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='<?= BASE_URL ?>assets/images/placeholder.svg';">
                 <div class="absolute bottom-2 left-2">
                     <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/80 text-amber-400 border border-white/10 flex items-center gap-1">
                         <i class="fa-solid fa-star text-[9px]"></i> ${sRating}
