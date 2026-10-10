@@ -203,7 +203,7 @@ function initializeDatabase($pdo) {
         }
     } catch(Exception $e) {}
 
-    // Ensure redeem_codes and user_redeemed_codes tables exist
+    // Ensure redeem_codes, user_redeemed_codes, and reward_logs tables exist safely
     try {
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `redeem_codes` (
@@ -215,32 +215,40 @@ function initializeDatabase($pdo) {
                 `used_count` INT DEFAULT 0,
                 `is_active` TINYINT(1) DEFAULT 1,
                 `expires_at` DATETIME NULL,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_code` (`code`)
+            ) DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch(Exception $e) {}
 
+    try {
+        $pdo->exec("
             CREATE TABLE IF NOT EXISTS `user_redeemed_codes` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `user_id` INT NOT NULL,
                 `code_id` INT NOT NULL,
-                `coins_awarded` INT NOT NULL,
+                `coins_awarded` INT NOT NULL DEFAULT 0,
                 `redeemed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY `uniq_user_code` (`user_id`, `code_id`),
-                FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-                FOREIGN KEY (`code_id`) REFERENCES `redeem_codes`(`id`) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                INDEX `idx_user` (`user_id`),
+                INDEX `idx_code` (`code_id`),
+                UNIQUE KEY `uniq_user_code` (`user_id`, `code_id`)
+            ) DEFAULT CHARSET=utf8mb4;
         ");
+    } catch(Exception $e) {}
 
-        $checkCodes = $pdo->query("SELECT COUNT(*) FROM `redeem_codes`")->fetchColumn();
-        if ($checkCodes == 0) {
-            $sampleCodes = [
-                ['FLOW2026', 150, 'Monthly Welcome Code 2026'],
-                ['MANHWAFACEBOOK', 200, 'Exclusive Facebook Page Community Code'],
-                ['WELCOME100', 100, 'New Reader Starter Gift']
-            ];
-            $codeStmt = $pdo->prepare("INSERT INTO `redeem_codes` (`code`, `coins`, `description`) VALUES (?, ?, ?)");
-            foreach ($sampleCodes as $sc) {
-                $codeStmt->execute($sc);
-            }
+    try {
+        $sampleCodes = [
+            ['MANHWAFACEBOOK', 200, 'Exclusive Facebook Page Community Code'],
+            ['FLOW2026', 150, 'Monthly Welcome Code 2026'],
+            ['WELCOME100', 100, 'New Reader Starter Gift']
+        ];
+        $codeStmt = $pdo->prepare("
+            INSERT INTO `redeem_codes` (`code`, `coins`, `description`, `is_active`) 
+            VALUES (?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE `is_active` = 1, `coins` = VALUES(`coins`)
+        ");
+        foreach ($sampleCodes as $sc) {
+            $codeStmt->execute($sc);
         }
     } catch(Exception $e) {}
 

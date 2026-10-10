@@ -41,6 +41,76 @@ function getHunterRank($totalEarned) {
     return ['rank' => 'Rank E', 'title' => 'Novice Reader', 'color' => 'from-slate-600 to-slate-700', 'badge' => '🌱'];
 }
 
+// Helper to ensure redeem code tables and essential codes exist safely
+function ensureRedeemInfrastructure($pdo) {
+    static $ready = false;
+    if ($ready) return;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `redeem_codes` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `code` VARCHAR(50) NOT NULL UNIQUE,
+                `coins` INT NOT NULL DEFAULT 100,
+                `description` VARCHAR(255) NULL,
+                `max_uses` INT DEFAULT 0,
+                `used_count` INT DEFAULT 0,
+                `is_active` TINYINT(1) DEFAULT 1,
+                `expires_at` DATETIME NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_code` (`code`)
+            ) DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Exception $e) {}
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `user_redeemed_codes` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `code_id` INT NOT NULL,
+                `coins_awarded` INT NOT NULL DEFAULT 0,
+                `redeemed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_user` (`user_id`),
+                INDEX `idx_code` (`code_id`),
+                UNIQUE KEY `uniq_user_code` (`user_id`, `code_id`)
+            ) DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Exception $e) {}
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `reward_logs` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NOT NULL,
+                `action_type` VARCHAR(50) NOT NULL,
+                `coins` INT NOT NULL,
+                `description` VARCHAR(255) NOT NULL,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_user_action` (`user_id`, `action_type`)
+            ) DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Exception $e) {}
+
+    try {
+        $defaults = [
+            ['MANHWAFACEBOOK', 200, 'Exclusive Facebook Page Community Code'],
+            ['FLOW2026', 150, 'Monthly Welcome Code 2026'],
+            ['WELCOME100', 100, 'New Reader Starter Gift']
+        ];
+        $codeStmt = $pdo->prepare("
+            INSERT INTO `redeem_codes` (`code`, `coins`, `description`, `is_active`) 
+            VALUES (?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE `is_active` = 1, `coins` = VALUES(`coins`)
+        ");
+        foreach ($defaults as $d) {
+            $codeStmt->execute($d);
+        }
+    } catch (Exception $e) {}
+
+    $ready = true;
+}
+
 // Unauthenticated response for guest users
 if (!$userId) {
     if ($action === 'get_status') {
@@ -283,19 +353,35 @@ if ($action === 'watch_ad') {
 
 // --- 6. REDEEM MONTHLY PROMO CODE ---
 if ($action === 'redeem_code') {
+    ensureRedeemInfrastructure($pdo);
+
     $raw = file_get_contents('php://input');
-    $data = json_decode($raw, true) ?? $_POST;
+    $data = [];
+    if (!empty($raw)) {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $data = $decoded;
+        }
+    }
+    if (empty($data)) {
+        $data = $_POST;
+    }
     $inputCode = strtoupper(trim($data['code'] ?? ($_GET['code'] ?? '')));
 
     if (empty($inputCode)) {
-        echo json_encode(['success' => false, 'message' => 'Please enter a redeem code.']);
+        echo json_encode(['success' => false, 'message' => 'Mangyaring maglagay ng redeem code (Please enter a redeem code).']);
         exit;
     }
 
     // Lookup code in database
-    $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
-    $cStmt->execute([$inputCode]);
-    $codeRow = $cStmt->fetch();
+    try {
+        $cStmt = $pdo->prepare("SELECT * FROM `redeem_codes` WHERE UPPER(`code`) = ? AND `is_active` = 1");
+        $cStmt->execute([$inputCode]);
+        $codeRow = $cStmt->fetch();
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error looking up code: ' . $e->getMessage()]);
+        exit;
+    }
 
     if (!$codeRow) {
         echo json_encode([
@@ -324,21 +410,27 @@ if ($action === 'redeem_code') {
     }
 
     // Check if user already claimed this code
-    $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
-    $checkUsed->execute([$userId, $codeRow['id']]);
-    if ($checkUsed->fetch()) {
-        echo json_encode([
-            'success' => false,
-            'message' => 'You have already redeemed this code! Each account can only claim each monthly code once.'
-        ]);
+    try {
+        $checkUsed = $pdo->prepare("SELECT id FROM `user_redeemed_codes` WHERE `user_id` = ? AND `code_id` = ?");
+        $checkUsed->execute([$userId, $codeRow['id']]);
+        if ($checkUsed->fetch()) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Na-redeem mo na ang code na ito! (You have already claimed this promo code).'
+            ]);
+            exit;
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Database error verifying code claims: ' . $e->getMessage()]);
         exit;
     }
 
     $rewardCoins = intval($codeRow['coins']);
 
     // Process redemption in transaction
-    $pdo->beginTransaction();
     try {
+        $pdo->beginTransaction();
+
         $insRedeem = $pdo->prepare("INSERT INTO `user_redeemed_codes` (`user_id`, `code_id`, `coins_awarded`) VALUES (?, ?, ?)");
         $insRedeem->execute([$userId, $codeRow['id'], $rewardCoins]);
 
@@ -348,8 +440,12 @@ if ($action === 'redeem_code') {
         $upUser = $pdo->prepare("UPDATE `user_rewards` SET `coins` = `coins` + ?, `total_earned` = `total_earned` + ? WHERE `user_id` = ?");
         $upUser->execute([$rewardCoins, $rewardCoins, $userId]);
 
-        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
-        $log->execute([$userId, $rewardCoins, "Redeemed monthly code: {$inputCode}"]);
+        try {
+            $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'redeem_code', ?, ?)");
+            $log->execute([$userId, $rewardCoins, "Redeemed monthly code: {$inputCode}"]);
+        } catch (Exception $eLog) {
+            // Non-fatal if reward_logs has an issue
+        }
 
         $pdo->commit();
 
@@ -358,12 +454,17 @@ if ($action === 'redeem_code') {
             'success' => true,
             'earned_coins' => $rewardCoins,
             'coins' => intval($newRow['coins']),
-            'message' => "🎉 Code redeemed successfully! +{$rewardCoins} Flow Coins added to your account balance!"
+            'message' => "🎉 Tagumpay! Nakuha mo ang +{$rewardCoins} Flow Coins mula sa code na {$inputCode}!"
         ]);
         exit;
     } catch (Exception $e) {
-        $pdo->rollBack();
-        echo json_encode(['success' => false, 'message' => 'Could not process redeem code. Please try again.']);
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'Hindi ma-proseso ang redeem code: ' . $e->getMessage()
+        ]);
         exit;
     }
 }

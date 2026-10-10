@@ -744,13 +744,25 @@ async function submitRedeemCode(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: code })
         });
-        const data = await res.json();
-        alert(data.message);
+        
+        const rawText = await res.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch(pErr) {
+            console.error('Non-JSON server response:', rawText);
+            const cleanErr = rawText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 150);
+            alert('Server response: ' + (cleanErr || 'Could not parse response.'));
+            return;
+        }
+
+        alert(data.message || (data.success ? 'Code successfully redeemed!' : 'Could not process redeem code.'));
         if (data.success) {
             window.location.reload();
         }
     } catch(err) {
-        alert('Could not process redeem code. Please try again.');
+        console.error(err);
+        alert('Could not process redeem code. Please check your internet connection and try again.');
     } finally {
         if (btn) {
             btn.disabled = false;
