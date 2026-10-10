@@ -1082,7 +1082,9 @@ class ChaptersFallback {
         $cacheFile = self::CACHE_DIR . "/anisa_details_{$slug}.json";
         if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
             $cached = json_decode(@file_get_contents($cacheFile), true);
-            if (!empty($cached)) return $cached;
+            if (!empty($cached) && !empty($cached['cover_url']) && !str_contains($cached['cover_url'], 'anisascans.in')) {
+                return $cached;
+            }
         }
 
         $url = self::ANISA_BASE . "/manga/{$slug}/";
