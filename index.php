@@ -11,6 +11,7 @@ $typeFilter = isset($_GET['type']) ? strtolower(trim($_GET['type'])) : '';
 if ($typeFilter !== 'manhwa' && $typeFilter !== 'manhua') {
     $typeFilter = '';
 }
+$sourceFilter = isset($_GET['source']) ? strtolower(trim($_GET['source'])) : '';
 
 // English genres list for filter pills
 $genres = [
@@ -40,19 +41,30 @@ $page = max(1, intval($_GET['page'] ?? 1));
 $limit = 30;
 
 // Helper to preserve filter query parameters across page numbers
-function getPageUrl($p, $search, $genreSlug, $typeFilter = '') {
+function getPageUrl($p, $search, $genreSlug, $typeFilter = '', $sourceFilter = '') {
     $params = [];
     if (!empty($search)) $params['q'] = $search;
     if (!empty($genreSlug)) $params['genre'] = $genreSlug;
     if (!empty($typeFilter)) $params['type'] = $typeFilter;
+    if (!empty($sourceFilter)) $params['source'] = $sourceFilter;
     if ($p > 1) $params['page'] = $p;
     $qs = http_build_query($params);
     return BASE_URL . 'index.php' . ($qs ? '?' . $qs : '');
 }
 
+require_once __DIR__ . '/includes/chapters_fallback.php';
+$athreaSpotlight = ChaptersFallback::getAthreaDirectory(12);
+
 // Fetch items directly from real-time library with pagination
 $pagedResult = [];
-if (!empty($search)) {
+if ($sourceFilter === 'athrea') {
+    $athreaList = ChaptersFallback::getAthreaDirectory(35);
+    $pagedResult = [
+        'items' => $athreaList,
+        'total' => count($athreaList),
+        'total_pages' => 1
+    ];
+} elseif (!empty($search)) {
     $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, $typeFilter);
 } elseif (!empty($genreSlug)) {
     $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page, $typeFilter);
@@ -245,15 +257,20 @@ require_once __DIR__ . '/includes/header.php';
         <!-- Genre Filter Pills -->
         <div class="space-y-2">
             <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre
+                <i class="fa-solid fa-tags text-brand-500"></i> Browse by Genre &amp; Sources
             </h2>
             <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-                <a href="<?= getPageUrl(1, $search, '', $typeFilter) ?>" 
-                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= empty($genreSlug) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
+                <a href="<?= getPageUrl(1, $search, '', $typeFilter, '') ?>" 
+                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= empty($genreSlug) && empty($sourceFilter) ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
                     All Genres
                 </a>
+                <a href="<?= getPageUrl(1, '', '', '', $sourceFilter === 'athrea' ? '' : 'athrea') ?>" 
+                   class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 <?= $sourceFilter === 'athrea' ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md shadow-pink-900/40 ring-2 ring-pink-400/50' : 'bg-pink-950/40 hover:bg-pink-900/40 text-pink-300 border border-pink-500/40' ?>">
+                    <span>🌸 Athrea Scans</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-200">Romance</span>
+                </a>
                 <?php foreach ($genres as $g): ?>
-                    <a href="<?= getPageUrl(1, $search, $g['slug'], $typeFilter) ?>" 
+                    <a href="<?= getPageUrl(1, $search, $g['slug'], $typeFilter, '') ?>" 
                        class="shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all <?= $genreSlug === $g['slug'] ? 'bg-brand-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700' ?>">
                         <?= htmlspecialchars($g['name']) ?>
                     </a>
@@ -261,6 +278,74 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
     </section>
+
+    <!-- ATHREA SCANS EXCLUSIVE SHOWCASE (Featured on default Homepage view) -->
+    <?php if (empty($search) && empty($genreSlug) && empty($sourceFilter) && empty($typeFilter) && $page === 1 && !empty($athreaSpotlight)): ?>
+    <section class="space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-dark-800">
+            <div>
+                <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
+                    <span class="w-2.5 h-6 rounded-full bg-pink-500"></span>
+                    <span>🌸 Athrea Scans Collection</span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 uppercase tracking-wider">Top Romance &amp; Shoujo</span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-0.5">High-definition romance &amp; drama webtoons direct from Athrea Scans.</p>
+            </div>
+            <a href="<?= BASE_URL ?>index.php?source=athrea" class="text-xs font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1.5 transition-colors self-start sm:self-auto bg-pink-950/40 px-3 py-1.5 rounded-xl border border-pink-500/30 hover:border-pink-500/60">
+                <span>View Full Athrea Catalog</span>
+                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </a>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            <?php foreach (array_slice($athreaSpotlight, 0, 6) as $ath): ?>
+                <?php 
+                    $cardUrl = BASE_URL . "manhwa.php?md_id=" . urlencode($ath['id']);
+                    $coverUrl = $ath['cover_url'];
+                    if (str_contains($coverUrl, 'athreascans.com')) {
+                        $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
+                    }
+                    $title = $ath['title'];
+                ?>
+                <div class="group flex flex-col bg-dark-900 rounded-xl overflow-hidden border border-dark-800/80 hover:border-pink-500/60 shadow-lg hover:shadow-pink-900/20 transition-all duration-300">
+                    <a href="<?= $cardUrl ?>" class="relative aspect-[2/3] overflow-hidden bg-dark-950 block">
+                        <img src="<?= htmlspecialchars($coverUrl) ?>" 
+                             alt="<?= htmlspecialchars($title) ?>" 
+                             referrerpolicy="no-referrer"
+                             loading="lazy"
+                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        <div class="absolute top-2 left-2 flex flex-col gap-1">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/75 backdrop-blur-md text-amber-400 border border-white/10 flex items-center gap-1">
+                                <i class="fa-solid fa-star text-[9px]"></i> <?= htmlspecialchars($ath['rating']) ?>
+                            </span>
+                        </div>
+                        <div class="absolute top-2 right-2 flex flex-col gap-1">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-pink-600 text-white shadow-sm backdrop-blur-md border border-white/10">
+                                Athrea
+                            </span>
+                        </div>
+                        <div class="absolute bottom-2 right-2">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-dark-900/90 backdrop-blur-md text-slate-200 border border-dark-700">
+                                <?= htmlspecialchars($ath['latest_chapter']) ?>
+                            </span>
+                        </div>
+                    </a>
+                    <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
+                        <div>
+                            <h3 class="font-bold text-sm text-slate-100 group-hover:text-pink-400 transition-colors line-clamp-1" title="<?= htmlspecialchars($title) ?>">
+                                <a href="<?= $cardUrl ?>"><?= htmlspecialchars($title) ?></a>
+                            </h3>
+                            <p class="text-[11px] text-pink-400/80 font-medium line-clamp-1 mt-0.5">Romance &bull; Drama</p>
+                        </div>
+                        <a href="<?= $cardUrl ?>" class="w-full py-1.5 px-3 rounded-lg bg-pink-600/20 hover:bg-pink-600 text-pink-300 hover:text-white border border-pink-500/30 text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-book-open text-[10px]"></i> Read Series
+                        </a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <!-- Non-Intrusive Sponsored Slot -->
     <?php renderAdSlot('home_middle'); ?>
@@ -270,8 +355,10 @@ require_once __DIR__ . '/includes/header.php';
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-dark-800">
             <div>
                 <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-                    <span class="w-2.5 h-6 rounded-full bg-brand-500"></span>
-                    <?php if (!empty($search)): ?>
+                    <span class="w-2.5 h-6 rounded-full <?= $sourceFilter === 'athrea' ? 'bg-pink-500' : 'bg-brand-500' ?>"></span>
+                    <?php if ($sourceFilter === 'athrea'): ?>
+                        <span class="text-pink-400">🌸 Athrea Scans Collection</span> &bull; Romance &amp; Shoujo
+                    <?php elseif (!empty($search)): ?>
                         Search Results for: "<span class="text-brand-400"><?= htmlspecialchars($search) ?></span>"
                     <?php elseif (!empty($genreSlug)): ?>
                         Genre: <span class="text-brand-400"><?= htmlspecialchars(ucwords(str_replace('-', ' ', $genreSlug))) ?></span>
@@ -305,6 +392,9 @@ require_once __DIR__ . '/includes/header.php';
                     <?php 
                         $cardUrl = BASE_URL . "manhwa.php?md_id=" . urlencode($m['id']);
                         $coverUrl = $m['cover_url'];
+                        if (str_contains($coverUrl, 'athreascans.com')) {
+                            $coverUrl = BASE_URL . 'api/image_proxy.php?url=' . urlencode($coverUrl);
+                        }
                         $title = $m['title'];
                         $status = $m['status'];
                         $genresText = implode(', ', array_slice($m['tags'] ?? [], 0, 2)) ?: 'Webtoon';

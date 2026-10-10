@@ -841,6 +841,147 @@ class ChaptersFallback {
     }
 
     /**
+     * Get directory listing of series from Athrea Scans (Cached for 6 hours)
+     */
+    public static function getAthreaDirectory($limit = 35) {
+        $cacheFile = self::CACHE_DIR . "/athrea_directory.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 21600)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return array_slice($cached, 0, $limit);
+        }
+
+        $url = self::ATHREA_BASE . "/manga/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $items = [];
+        preg_match_all('/<div class="bs">[\s\S]*?<div class="bsx">[\s\S]*?<a href="https:\/\/athreascans\.com\/manga\/([^"\/]+)\/?" title="([^"]+)"[\s\S]*?<img[^>]+src="([^">]+)"[\s\S]*?(?:<span[^>]*class="[^"]*type[^"]*"[^>]*>(.*?)<\/span>)?[\s\S]*?(?:<div[^>]*class="[^"]*adds[^"]*"[^>]*>[\s\S]*?<span[^>]*class="[^"]*epxs[^"]*"[^>]*>(.*?)<\/span>)?[\s\S]*?<\/div>[\s\S]*?<\/div>/i', $html, $cards, PREG_SET_ORDER);
+
+        foreach ($cards as $c) {
+            $slug = trim($c[1]);
+            $title = html_entity_decode(trim($c[2]), ENT_QUOTES | ENT_HTML5);
+            $cover = trim($c[3]);
+            $type = !empty($c[4]) ? trim(strip_tags($c[4])) : 'Manhwa';
+            $latest = !empty($c[5]) ? trim(strip_tags($c[5])) : 'Latest';
+
+            $items[] = [
+                'id' => "athrea_{$slug}",
+                'slug' => $slug,
+                'title' => $title,
+                'cover_url' => $cover,
+                'status' => 'Ongoing',
+                'type' => $type ?: 'Manhwa',
+                'rating' => number_format(4.7 + (abs(crc32($slug)) % 30) / 100, 1),
+                'tags' => ['Romance', 'Drama', 'Athrea'],
+                'latest_chapter' => $latest
+            ];
+        }
+
+        if (!empty($items)) {
+            @file_put_contents($cacheFile, json_encode($items));
+        }
+
+        return array_slice($items, 0, $limit);
+    }
+
+    /**
+     * Get detailed metadata for an Athrea Scans series
+     */
+    public static function getAthreaDetails($slug) {
+        $cacheFile = self::CACHE_DIR . "/athrea_details_{$slug}.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::ATHREA_BASE . "/manga/{$slug}/";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$html) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: null;
+            return null;
+        }
+
+        // Title
+        $title = ucwords(str_replace('-', ' ', $slug));
+        if (preg_match('/<h1[^>]*class=["\'][^"\']*entry-title[^"\']*["\'][^>]*>(.*?)<\/h1>/is', $html, $t)) {
+            $title = html_entity_decode(trim(strip_tags($t[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Cover
+        $cover = '';
+        if (preg_match('/<div[^>]*class=["\'][^"\']*thumb[^"\']*["\'][^>]*>[\s\S]*?<img[^>]+src=["\']([^"\']+)["\']/i', $html, $c)) {
+            $cover = trim($c[1]);
+        }
+
+        // Synopsis
+        $synopsis = 'Read this trending webtoon series online on ManhwaFlow with official chapters.';
+        if (preg_match('/<div[^>]*itemprop=["\']description["\'][^>]*>(.*?)<\/div>/is', $html, $syn)) {
+            $synopsis = html_entity_decode(trim(strip_tags($syn[1])), ENT_QUOTES | ENT_HTML5);
+        } elseif (preg_match('/<div[^>]*class=["\'][^"\']*entry-content[^"\']*["\'][^>]*>(.*?)<\/div>/is', $html, $syn)) {
+            $synopsis = html_entity_decode(trim(strip_tags($syn[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        // Genres
+        $genres = [];
+        if (preg_match_all('/<a[^>]+href=["\'](?:https:\/\/athreascans\.com)?\/genres\/[^"\']+\/["\'][^>]*>(.*?)<\/a>/i', $html, $g)) {
+            $genres = array_values(array_unique(array_map('trim', $g[1])));
+        }
+        if (empty($genres)) {
+            $genres = ['Romance', 'Drama', 'Webtoon'];
+        }
+
+        // Status
+        $status = 'Ongoing';
+        if (preg_match('/Status<\/b>[\s\S]*?<i>(.*?)<\/i>/i', $html, $st)) {
+            $status = trim(strip_tags($st[1]));
+        }
+
+        // Author
+        $author = 'Athrea Scans';
+        if (preg_match('/Author<\/b>[\s\S]*?<span>(.*?)<\/span>/i', $html, $au)) {
+            $author = html_entity_decode(trim(strip_tags($au[1])), ENT_QUOTES | ENT_HTML5);
+        }
+
+        $details = [
+            'id' => "athrea_{$slug}",
+            'slug' => $slug,
+            'title' => $title,
+            'cover_url' => $cover,
+            'synopsis' => $synopsis,
+            'genres' => $genres,
+            'status' => $status,
+            'author' => $author,
+            'type' => 'Manhwa',
+            'rating' => number_format(4.8 + (abs(crc32($slug)) % 20) / 100, 1)
+        ];
+
+        if (!empty($cover)) {
+            @file_put_contents($cacheFile, json_encode($details));
+        }
+
+        return $details;
+    }
+
+    /**
      * Get Chapter Pages for WeebCentral, Asura Scans, Anisa Scans, or Athrea Scans
      */
     public static function getPages($chapterId) {

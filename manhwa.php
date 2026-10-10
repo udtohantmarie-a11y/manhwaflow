@@ -14,7 +14,57 @@ $genres = [];
 $chapters = [];
 $relatedManhwas = [];
 
-if ($isLive) {
+if (str_starts_with($rawId, 'athrea_')) {
+    // --- ATHREA SCANS LIVE MODE ---
+    require_once __DIR__ . '/includes/chapters_fallback.php';
+    $athreaSlug = substr($rawId, 7);
+    $athreaData = ChaptersFallback::getAthreaDetails($athreaSlug);
+
+    if (!$athreaData) {
+        die("Series not found on Athrea Scans. <a href='" . BASE_URL . "'>Return to Home</a>");
+    }
+
+    $manhwa = [
+        'id' => $rawId,
+        'title' => $athreaData['title'],
+        'slug' => 'athrea-' . $athreaSlug,
+        'alt_title' => $athreaData['title'],
+        'author' => $athreaData['author'] ?? 'Athrea Scans',
+        'artist' => $athreaData['author'] ?? 'Athrea Scans',
+        'status' => $athreaData['status'] ?? 'Ongoing',
+        'type' => $athreaData['type'] ?? 'Manhwa',
+        'rating' => $athreaData['rating'] ?? 4.9,
+        'views' => rand(15000, 65000),
+        'synopsis' => $athreaData['synopsis'] ?? 'Read online at ManhwaFlow.',
+        'cover_image' => $athreaData['cover_url'],
+        'banner_image' => $athreaData['cover_url'],
+        'is_live' => true
+    ];
+
+    foreach ($athreaData['genres'] as $idx => $t) {
+        $genres[] = [
+            'id' => $idx + 1,
+            'name' => $t,
+            'slug' => strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $t), '-'))
+        ];
+    }
+
+    $liveChapters = ChaptersFallback::getAthreaChapters($athreaSlug, 1000);
+    // Sort DESC for chapter list display
+    usort($liveChapters, function($a, $b) {
+        return $b['chapter_number'] <=> $a['chapter_number'];
+    });
+
+    foreach ($liveChapters as $lc) {
+        $lc['read_url'] = BASE_URL . "reader.php?md_ch=" . urlencode($lc['id']) . "&md_manga=" . urlencode($rawId) . "&ch_num=" . $lc['chapter_number'];
+        $lc['views'] = rand(1200, 6500);
+        $chapters[] = $lc;
+    }
+
+    $firstChapter = !empty($chapters) ? end($chapters) : null;
+    $latestChapter = !empty($chapters) ? $chapters[0] : null;
+
+} elseif ($isLive) {
     // --- LIVE MANGADEX MODE ---
     $mdId = trim($rawId);
     $liveManga = MangaDexAPI::getMangaDetailsLive($mdId);
