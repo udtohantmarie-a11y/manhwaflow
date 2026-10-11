@@ -82,6 +82,12 @@ require_once __DIR__ . '/includes/header.php';
         <p class="text-xs text-slate-400">Access your saved bookmarks, reading history, and Flow Coins rewards.</p>
     </div>
 
+    <?php if (isset($_GET['reset']) && $_GET['reset'] === 'success'): ?>
+        <div class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs sm:text-sm flex items-center gap-2">
+            <i class="fa-solid fa-circle-check"></i> Password successfully changed! You can now sign in with your new password.
+        </div>
+    <?php endif; ?>
+
     <?php if (!empty($error)): ?>
         <div class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs sm:text-sm flex items-center gap-2">
             <i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($error) ?>
@@ -104,9 +110,14 @@ require_once __DIR__ . '/includes/header.php';
             </div>
 
             <div>
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Password
-                </label>
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                        Password
+                    </label>
+                    <a href="<?= BASE_URL ?>forgot-password.php" class="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors">
+                        Forgot Password?
+                    </a>
+                </div>
                 <div class="relative">
                     <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
                     <input type="password" name="password" required placeholder="••••••••" 

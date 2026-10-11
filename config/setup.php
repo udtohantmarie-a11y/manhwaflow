@@ -181,6 +181,16 @@ function initializeDatabase($pdo) {
             INDEX `idx_user_action` (`user_id`, `action_type`),
             FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+        CREATE TABLE IF NOT EXISTS `password_resets` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `email` VARCHAR(100) NOT NULL,
+            `code` VARCHAR(10) NOT NULL,
+            `expires_at` DATETIME NOT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_email` (`email`),
+            INDEX `idx_code` (`code`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
     // Ensure default payout & ad watch columns exist in user_rewards
