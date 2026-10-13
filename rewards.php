@@ -128,8 +128,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // 3. Watch Daily Ad
     elseif ($act === 'watch_ad') {
+        $visitToken = trim($_POST['visit_token'] ?? '');
+        $adblockStatus = trim($_POST['adblock_status'] ?? '');
+        $challenge = $_SESSION['ad_visit_challenge'] ?? null;
+
         if (!$userId) {
             $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to watch daily ads!'];
+        } elseif ($adblockStatus === 'blocked') {
+            $redeemAlert = ['type' => 'rose', 'message' => '⚠️ Naka-on ang iyong AdBlocker! Paki-disable muna ang AdBlocker o Brave Shields upang ma-claim ang Flow Coins.'];
+        } elseif (empty($challenge) || empty($visitToken) || $challenge['token'] !== $visitToken || $challenge['type'] !== 'watch_ad') {
+            $redeemAlert = ['type' => 'rose', 'message' => '⚠️ Hindi mo pa nabubuksan ang ad link! Mangyaring buksan at bisitahin muna ang link bago mag-claim.'];
+        } elseif ((time() - intval($challenge['started_at'])) < 4) {
+            $redeemAlert = ['type' => 'amber', 'message' => '⏳ Paki-antay at tingnan ang ad page nang hindi bababa sa 5 segundo bago mag-claim!'];
         } else {
             $today = date('Y-m-d');
             $uRew = $pdo->prepare("SELECT * FROM `user_rewards` WHERE `user_id` = ?");
@@ -154,6 +164,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         `last_ad_date` = ?
                 ")->execute([$userId, $earnedCoins, $earnedCoins, $newCount, $today, $earnedCoins, $earnedCoins, $newCount, $today]);
 
+                unset($_SESSION['ad_visit_challenge']);
+
                 try {
                     $logDesc = "Daily Ad Watch ({$newCount}/5)" . ($newCount === 5 ? " + Completion Bonus" : "");
                     $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'ad_watch', ?, ?)");
@@ -162,12 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 $msg = ($newCount === 5)
                     ? "🎉 Kumpleto ang 5/5 ads quest! +{$earnedCoins} Coins credited (kasama ang completion bonus)!"
-                    : "🎉 Napanood mo ang ad {$newCount}/5! +{$earnedCoins} Flow Coins naidagdag sa iyong balance.";
+                    : "🎉 Napanood at nabisita ang ad {$newCount}/5! +{$earnedCoins} Flow Coins naidagdag sa iyong balance.";
 
                 $redeemAlert = [
                     'type' => 'emerald',
-                    'message' => $msg,
-                    'open_url' => 'https://uplcm.com/4/11983803'
+                    'message' => $msg
                 ];
             }
         }
@@ -175,8 +186,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // 4. Daily Sponsor Quest
     elseif ($act === 'sponsor_quest') {
+        $visitToken = trim($_POST['visit_token'] ?? '');
+        $adblockStatus = trim($_POST['adblock_status'] ?? '');
+        $challenge = $_SESSION['ad_visit_challenge'] ?? null;
+
         if (!$userId) {
             $redeemAlert = ['type' => 'rose', 'message' => 'Please sign in first to claim daily sponsor bonus!'];
+        } elseif ($adblockStatus === 'blocked') {
+            $redeemAlert = ['type' => 'rose', 'message' => '⚠️ Naka-on ang iyong AdBlocker! Paki-disable muna ang AdBlocker o Brave Shields upang ma-claim ang Flow Coins.'];
+        } elseif (empty($challenge) || empty($visitToken) || $challenge['token'] !== $visitToken || $challenge['type'] !== 'sponsor_quest') {
+            $redeemAlert = ['type' => 'rose', 'message' => '⚠️ Hindi mo pa nabubuksan ang sponsor link! Mangyaring buksan at bisitahin muna ang link bago mag-claim.'];
+        } elseif ((time() - intval($challenge['started_at'])) < 4) {
+            $redeemAlert = ['type' => 'amber', 'message' => '⏳ Paki-antay at tingnan ang sponsor page nang hindi bababa sa 5 segundo bago mag-claim!'];
         } else {
             $today = date('Y-m-d');
             $uRew = $pdo->prepare("SELECT * FROM `user_rewards` WHERE `user_id` = ?");
@@ -186,8 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($row && $row['last_sponsor_date'] === $today) {
                 $redeemAlert = [
                     'type' => 'amber', 
-                    'message' => 'Na-claim mo na ang Daily Sponsor Bonus ngayong araw! Magbalik bukas para sa panibagong +50 coins.',
-                    'open_url' => 'https://uplcm.com/4/11983803'
+                    'message' => 'Na-claim mo na ang Daily Sponsor Bonus ngayong araw! Magbalik bukas para sa panibagong +50 coins.'
                 ];
             } else {
                 $earnedCoins = 50;
@@ -200,6 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         `last_sponsor_date` = ?
                 ")->execute([$userId, $earnedCoins, $earnedCoins, $today, $earnedCoins, $earnedCoins, $today]);
 
+                unset($_SESSION['ad_visit_challenge']);
+
                 try {
                     $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'sponsor_offer', ?, ?)");
                     $log->execute([$userId, $earnedCoins, "Daily Partner Sponsor Exploration"]);
@@ -207,8 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 $redeemAlert = [
                     'type' => 'emerald',
-                    'message' => "🎉 Tagumpay! Nakuha mo ang +{$earnedCoins} Flow Coins mula sa Daily Sponsor Offer!",
-                    'open_url' => 'https://uplcm.com/4/11983803'
+                    'message' => "🎉 Tagumpay! Nabisita ang sponsor page at nakuha mo ang +{$earnedCoins} Flow Coins mula sa Daily Sponsor Offer!"
                 ];
             }
         }
@@ -328,7 +349,21 @@ function calcRank($total) {
 $rankData = calcRank($totalEarned);
 ?>
 
+<script src="<?= BASE_URL ?>assets/js/ads.js?v=<?= time() ?>"></script>
+<div id="ad-detector-slot" class="adsbox ad-banner pub_300x250 text-ad" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;" aria-hidden="true">&nbsp;</div>
+
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+
+    <!-- AdBlock Warning Notification (Dynamic JS) -->
+    <div id="adblock-alert-banner" class="hidden p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 shadow-lg">
+        <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-shield-halved text-base sm:text-lg text-amber-400 shrink-0"></i>
+            <span><strong>AdBlock Detected:</strong> Naka-on ang iyong ad blocker o Brave Shields. Paki-disable ito upang ma-claim ang Flow Coins mula sa Daily Ads at Partner Offers.</span>
+        </div>
+        <button type="button" onclick="document.getElementById('adblock-alert-banner').classList.add('hidden')" class="text-slate-400 hover:text-white p-1">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
 
     <!-- Global Flash Notification for Redeem Alert -->
     <?php if ($redeemAlert): ?>
@@ -514,9 +549,11 @@ $rankData = calcRank($totalEarned);
                 <div>
                     <?php if ($userId): ?>
                         <?php if ($canWatchAd): ?>
-                            <form method="POST" action="rewards.php">
+                            <form method="POST" action="rewards.php" id="form-watch-ad">
                                 <input type="hidden" name="action" value="watch_ad">
-                                <button type="submit" id="btn-watch-ad"
+                                <input type="hidden" name="visit_token" id="token-watch-ad" value="">
+                                <input type="hidden" name="adblock_status" id="adblock-watch-ad" value="">
+                                <button type="button" id="btn-watch-ad" onclick="handleAdQuestClick('watch_ad')"
                                         class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-dark-950 font-black text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
                                     <i class="fa-solid fa-play text-[10px]"></i>
                                     <span>Watch Ad (<?= $adsWatchedToday ?>/5)</span>
@@ -555,9 +592,11 @@ $rankData = calcRank($totalEarned);
                 <div class="pt-6">
                     <?php if ($userId): ?>
                         <?php if ($canSponsor): ?>
-                            <form method="POST" action="rewards.php">
+                            <form method="POST" action="rewards.php" id="form-sponsor-quest">
                                 <input type="hidden" name="action" value="sponsor_quest">
-                                <button type="submit" id="btn-sponsor-quest"
+                                <input type="hidden" name="visit_token" id="token-sponsor-quest" value="">
+                                <input type="hidden" name="adblock_status" id="adblock-sponsor-quest" value="">
+                                <button type="button" id="btn-sponsor-quest" onclick="handleAdQuestClick('sponsor_quest')"
                                         class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-brand-600/30 transition-all flex items-center justify-center gap-2">
                                     <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
                                     <span>Claim +50 Coins (Visit Offer)</span>
@@ -1005,6 +1044,98 @@ $rankData = calcRank($totalEarned);
     </div>
 </div>
 
+<!-- ADBLOCK DETECTED MODAL -->
+<div id="adblock-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-dark-900 border border-rose-500/40 rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl relative text-center">
+        <button onclick="closeAdblockModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white p-2">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+
+        <div class="w-16 h-16 rounded-3xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto text-2xl shadow-lg shadow-rose-950/40">
+            <i class="fa-solid fa-shield-halved"></i>
+        </div>
+
+        <div class="space-y-2">
+            <h3 class="text-xl font-black text-white">Naka-on ang AdBlocker!</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Hindi mo maaaring ma-claim ang Flow Coins habang may active ad blocker, Brave Shields, o DNS adblock.
+            </p>
+        </div>
+
+        <div class="bg-dark-850 border border-dark-750 rounded-2xl p-4 text-left space-y-2">
+            <div class="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-lightbulb"></i> Paano ito i-disable:
+            </div>
+            <ul class="text-[11px] text-slate-400 space-y-1 list-disc list-inside">
+                <li>I-off ang extension gaya ng <strong>uBlock Origin</strong> o <strong>AdGuard</strong> para sa site na ito.</li>
+                <li>Kung gamit ang <strong>Brave Browser</strong>, i-click ang lion icon at i-toggle OFF ang <strong>Shields</strong>.</li>
+                <li>I-refresh ang page pagkatapos i-disable upang ma-claim ang coins.</li>
+            </ul>
+        </div>
+
+        <div class="flex gap-3">
+            <button onclick="closeAdblockModal()" class="flex-1 py-3 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 font-bold text-xs transition-colors">
+                Isara
+            </button>
+            <button onclick="window.location.reload()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-brand-900/40 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span>I-refresh ang Page</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- SPONSOR & AD VISIT VERIFICATION MODAL -->
+<div id="sponsor-visit-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-dark-900 border border-brand-500/40 rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl relative text-center">
+        <button onclick="closeSponsorModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white p-2">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+
+        <div id="modal-ad-icon" class="w-16 h-16 rounded-3xl bg-brand-500/20 text-brand-400 flex items-center justify-center mx-auto text-2xl shadow-lg shadow-brand-950/40 animate-pulse">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+        </div>
+
+        <div class="space-y-2">
+            <h3 id="modal-ad-title" class="text-xl font-black text-white">Binubuksan ang Partner Sponsor...</h3>
+            <p id="modal-ad-subtitle" class="text-xs text-slate-300 leading-relaxed">
+                Pakitingnan at bisitahin ang nabuksang tab nang hindi bababa sa <span class="text-amber-400 font-bold">5 segundo</span> bago i-claim ang coins.
+            </p>
+        </div>
+
+        <!-- Timer & Progress Bar -->
+        <div class="space-y-2 bg-dark-850 border border-dark-750 rounded-2xl p-4">
+            <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400 font-semibold" id="modal-timer-status">Verifying visit...</span>
+                <span class="font-black text-amber-400 text-sm" id="modal-timer-text">5s</span>
+            </div>
+            <div class="h-2.5 w-full bg-dark-800 rounded-full overflow-hidden border border-dark-750">
+                <div id="modal-timer-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 rounded-full transition-all duration-300 w-0"></div>
+            </div>
+        </div>
+
+        <!-- Manual Re-open link if popup blocked -->
+        <div id="modal-reopen-wrap" class="hidden text-xs">
+            <p class="text-slate-400 mb-1">Hindi bumukas ang tab o na-block ng browser?</p>
+            <a id="modal-reopen-link" href="#" target="_blank" class="inline-flex items-center gap-1.5 text-brand-400 hover:text-brand-300 underline font-bold">
+                <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i> I-click dito para manu-manong buksan ang link
+            </a>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="space-y-2">
+            <button id="btn-claim-verified" disabled onclick="submitVerifiedClaim()"
+                    class="w-full py-3.5 rounded-xl bg-dark-800 text-slate-500 font-bold text-xs cursor-not-allowed transition-all flex items-center justify-center gap-2 border border-dark-750">
+                <i class="fa-solid fa-lock text-xs"></i>
+                <span id="btn-claim-text">Mag-antay nang 5 segundo...</span>
+            </button>
+            <button onclick="closeSponsorModal()" class="w-full py-2.5 rounded-xl bg-transparent text-slate-400 hover:text-white font-semibold text-xs">
+                Kanselahin
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Modal controls for GCash/Maya Cashout
 function openRedeemModal(amount, coins) {
@@ -1070,6 +1201,237 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// --- ADBLOCK & SPONSOR VISIT VERIFICATION ENGINE ---
+let currentAdChallenge = {
+    token: null,
+    type: null,
+    sponsorUrl: null,
+    waitSeconds: 5,
+    timerInterval: null,
+    elapsedSeconds: 0,
+    isReadyToClaim: false
+};
+
+// 1. Multi-layer AdBlock Detection
+function checkAdBlock() {
+    // Check 1: Script probe (ads.js)
+    if (typeof window.__mf_adblock_check_passed === 'undefined' || window.__mf_adblock_check_passed !== true) {
+        return true;
+    }
+    // Check 2: Element bait
+    const bait = document.getElementById('ad-detector-slot');
+    if (bait) {
+        if (bait.offsetHeight === 0 || bait.offsetWidth === 0 || window.getComputedStyle(bait).display === 'none' || window.getComputedStyle(bait).visibility === 'hidden') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Check on load and show banner if blocked
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        if (checkAdBlock()) {
+            const banner = document.getElementById('adblock-alert-banner');
+            if (banner) banner.classList.remove('hidden');
+        }
+    }, 400);
+});
+
+function openAdblockModal() {
+    const modal = document.getElementById('adblock-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeAdblockModal() {
+    const modal = document.getElementById('adblock-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function closeSponsorModal() {
+    if (currentAdChallenge.timerInterval) {
+        clearInterval(currentAdChallenge.timerInterval);
+        currentAdChallenge.timerInterval = null;
+    }
+    const modal = document.getElementById('sponsor-visit-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// 2. Open Sponsor Visit Modal & Launch Sponsor Link
+async function handleAdQuestClick(questType) {
+    // Check adblock first
+    if (checkAdBlock()) {
+        openAdblockModal();
+        return;
+    }
+
+    const modal = document.getElementById('sponsor-visit-modal');
+    const modalTitle = document.getElementById('modal-ad-title');
+    const modalSubtitle = document.getElementById('modal-ad-subtitle');
+    const timerStatus = document.getElementById('modal-timer-status');
+    const timerText = document.getElementById('modal-timer-text');
+    const timerBar = document.getElementById('modal-timer-bar');
+    const claimBtn = document.getElementById('btn-claim-verified');
+    const claimBtnText = document.getElementById('btn-claim-text');
+    const reopenWrap = document.getElementById('modal-reopen-wrap');
+    const reopenLink = document.getElementById('modal-reopen-link');
+
+    // Reset UI
+    modal.classList.remove('hidden');
+    if (questType === 'watch_ad') {
+        modalTitle.textContent = 'Binubuksan ang Partner Ad...';
+        modalSubtitle.innerHTML = 'Pakitingnan ang ad page nang hindi bababa sa <span class="text-amber-400 font-bold">5 segundo</span> bago i-claim ang Flow Coins.';
+    } else {
+        modalTitle.textContent = 'Binubuksan ang Daily Sponsor Offer...';
+        modalSubtitle.innerHTML = 'Pakitingnan ang sponsor page nang hindi bababa sa <span class="text-brand-400 font-bold">5 segundo</span> bago i-claim ang +50 coins.';
+    }
+
+    timerStatus.textContent = 'Kinukuha ang sponsor link...';
+    timerText.textContent = '5s';
+    timerBar.style.width = '0%';
+    claimBtn.disabled = true;
+    claimBtn.className = 'w-full py-3.5 rounded-xl bg-dark-800 text-slate-500 font-bold text-xs cursor-not-allowed transition-all flex items-center justify-center gap-2 border border-dark-750';
+    claimBtnText.textContent = 'Mag-antay nang 5 segundo...';
+    reopenWrap.classList.add('hidden');
+
+    if (currentAdChallenge.timerInterval) {
+        clearInterval(currentAdChallenge.timerInterval);
+    }
+
+    currentAdChallenge = {
+        token: null,
+        type: questType,
+        sponsorUrl: null,
+        waitSeconds: 5,
+        timerInterval: null,
+        elapsedSeconds: 0,
+        isReadyToClaim: false
+    };
+
+    try {
+        const resp = await fetch('<?= BASE_URL ?>api/rewards.php?action=start_ad_visit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: questType })
+        });
+        const resData = await resp.json();
+
+        if (!resData.success) {
+            alert(resData.message || 'Hindi masimulan ang sponsor visit.');
+            closeSponsorModal();
+            return;
+        }
+
+        currentAdChallenge.token = resData.visit_token;
+        currentAdChallenge.sponsorUrl = resData.sponsor_url;
+        currentAdChallenge.waitSeconds = resData.wait_seconds || 5;
+
+        // Set reopen fallback
+        reopenLink.href = currentAdChallenge.sponsorUrl;
+        reopenWrap.classList.remove('hidden');
+
+        // Immediately open popup in user click context
+        const popup = window.open(currentAdChallenge.sponsorUrl, '_blank');
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+            timerStatus.textContent = 'I-click ang link sa ibaba kung na-block ang tab ng browser!';
+        } else {
+            timerStatus.textContent = 'Bukas na ang page! Nagka-countdown...';
+        }
+
+        // Start countdown
+        let totalTime = currentAdChallenge.waitSeconds;
+        let elapsed = 0;
+        timerBar.style.width = '0%';
+
+        currentAdChallenge.timerInterval = setInterval(() => {
+            elapsed++;
+            currentAdChallenge.elapsedSeconds = elapsed;
+            let remaining = Math.max(0, totalTime - elapsed);
+            timerText.textContent = `${remaining}s`;
+            let percent = Math.min(100, Math.round((elapsed / totalTime) * 100));
+            timerBar.style.width = `${percent}%`;
+
+            if (remaining > 0) {
+                claimBtnText.textContent = `Mag-antay nang ${remaining}s...`;
+            } else {
+                clearInterval(currentAdChallenge.timerInterval);
+                currentAdChallenge.timerInterval = null;
+                currentAdChallenge.isReadyToClaim = true;
+
+                timerStatus.innerHTML = '<span class="text-emerald-400 font-bold"><i class="fa-solid fa-check-circle"></i> Ready to claim!</span>';
+                timerText.textContent = '✓ Done';
+                claimBtn.disabled = false;
+                claimBtn.className = 'w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm shadow-xl shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer';
+                claimBtn.innerHTML = '<i class="fa-solid fa-gift text-base"></i> <span>I-claim ang Coins Ngayon!</span>';
+            }
+        }, 1000);
+
+    } catch (err) {
+        console.error('start_ad_visit error:', err);
+        alert('May error sa koneksyon. Pakisubukan muli.');
+        closeSponsorModal();
+    }
+}
+
+// 3. Submit Claim with AdBlock and Token verification
+async function submitVerifiedClaim() {
+    if (!currentAdChallenge.isReadyToClaim || !currentAdChallenge.token) {
+        return;
+    }
+
+    if (checkAdBlock()) {
+        closeSponsorModal();
+        openAdblockModal();
+        return;
+    }
+
+    const claimBtn = document.getElementById('btn-claim-verified');
+    if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Vine-verify ang reward...</span>';
+    }
+
+    try {
+        const resp = await fetch('<?= BASE_URL ?>api/rewards.php?action=claim_ad_reward', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: currentAdChallenge.type,
+                visit_token: currentAdChallenge.token,
+                adblock_status: checkAdBlock() ? 'blocked' : 'allowed'
+            })
+        });
+        const resData = await resp.json();
+
+        if (resData.success) {
+            closeSponsorModal();
+            alert(resData.message || '🎉 Tagumpay na na-claim ang iyong coins!');
+            window.location.reload();
+        } else {
+            if (resData.is_adblock) {
+                closeSponsorModal();
+                openAdblockModal();
+            } else if (resData.too_fast) {
+                alert(resData.message || 'Paki-antay matapos ang 5 segundo bago mag-claim!');
+                if (claimBtn) {
+                    claimBtn.disabled = false;
+                    claimBtn.innerHTML = '<i class="fa-solid fa-gift"></i> <span>I-claim ang Coins Ngayon!</span>';
+                }
+            } else {
+                alert(resData.message || 'Hindi ma-verify ang claim.');
+                closeSponsorModal();
+            }
+        }
+    } catch (err) {
+        console.error('claim_ad_reward error:', err);
+        alert('May error sa koneksyon habang nagki-claim.');
+        if (claimBtn) {
+            claimBtn.disabled = false;
+            claimBtn.innerHTML = '<i class="fa-solid fa-gift"></i> <span>I-claim ang Coins Ngayon!</span>';
+        }
+    }
+}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -271,84 +271,170 @@ if ($action === 'read_chapter') {
     exit;
 }
 
-// --- 4. DAILY SPONSOR QUEST (MONETAG LINK) ---
-if ($action === 'sponsor_quest') {
-    if ($rewards['last_sponsor_date'] === $today) {
-        echo json_encode([
-            'success' => false, 
-            'message' => 'You have already claimed your Daily Sponsor Bonus today! Come back tomorrow for another +50 coins.'
-        ]);
+// --- 4. START SPONSOR / AD VISIT (CHALLENGE ISSUER) ---
+if ($action === 'start_ad_visit') {
+    $raw = file_get_contents('php://input');
+    $data = !empty($raw) ? json_decode($raw, true) : $_POST;
+    $type = trim($data['type'] ?? ($_GET['type'] ?? 'sponsor_quest'));
+
+    $today = date('Y-m-d');
+    $sponsorUrl = defined('MONETAG_DIRECT_LINK') ? MONETAG_DIRECT_LINK : 'https://uplcm.com/4/11983803';
+
+    if ($type === 'watch_ad') {
+        $lastAdDate = $rewards['last_ad_date'] ?? null;
+        $currentCount = ($lastAdDate === $today) ? intval($rewards['ads_watched_today'] ?? 0) : 0;
+        if ($currentCount >= 5) {
+            echo json_encode(['success' => false, 'message' => 'Daily ad watch task completed (5/5)! Resets at midnight tomorrow.']);
+            exit;
+        }
+    } elseif ($type === 'sponsor_quest') {
+        if ($rewards['last_sponsor_date'] === $today) {
+            echo json_encode(['success' => false, 'message' => 'You have already claimed your Daily Sponsor Bonus today! Come back tomorrow for another +50 coins.']);
+            exit;
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid visit challenge type.']);
         exit;
     }
 
-    $earnedCoins = 50;
-    $stmt = $pdo->prepare("
-        UPDATE `user_rewards` 
-        SET `coins` = `coins` + ?, 
-            `total_earned` = `total_earned` + ?, 
-            `last_sponsor_date` = ? 
-        WHERE `user_id` = ?
-    ");
-    $stmt->execute([$earnedCoins, $earnedCoins, $today, $userId]);
+    $token = bin2hex(random_bytes(16));
+    $_SESSION['ad_visit_challenge'] = [
+        'token' => $token,
+        'type' => $type,
+        'started_at' => time()
+    ];
 
-    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'sponsor_offer', ?, ?)");
-    $log->execute([$userId, $earnedCoins, "Daily Partner Sponsor Exploration"]);
-
-    $newRow = getUserRewardsRow($pdo, $userId);
     echo json_encode([
         'success' => true,
-        'earned_coins' => $earnedCoins,
-        'coins' => intval($newRow['coins']),
-        'sponsor_url' => 'https://uplcm.com/4/11983803',
-        'message' => "+{$earnedCoins} Flow Coins added to your balance!"
+        'visit_token' => $token,
+        'sponsor_url' => $sponsorUrl,
+        'wait_seconds' => 5,
+        'message' => 'Opening partner sponsor link...'
     ]);
     exit;
 }
 
-// --- 5. DAILY ADS TASK (0/5) ---
-if ($action === 'watch_ad') {
-    $lastAdDate = $rewards['last_ad_date'] ?? null;
-    $currentCount = ($lastAdDate === $today) ? intval($rewards['ads_watched_today'] ?? 0) : 0;
+// --- 5. CLAIM SPONSOR / AD REWARD (STRICT VISIT & ADBLOCK VERIFICATION) ---
+if ($action === 'claim_ad_reward' || $action === 'sponsor_quest' || $action === 'watch_ad') {
+    $raw = file_get_contents('php://input');
+    $data = !empty($raw) ? json_decode($raw, true) : $_POST;
 
-    if ($currentCount >= 5) {
+    $reqType = trim($data['type'] ?? ($action === 'watch_ad' ? 'watch_ad' : ($action === 'sponsor_quest' ? 'sponsor_quest' : '')));
+    $token = trim($data['visit_token'] ?? ($_GET['visit_token'] ?? ''));
+    $adblockStatus = trim($data['adblock_status'] ?? '');
+
+    // Strict AdBlock Check
+    if ($adblockStatus === 'blocked') {
         echo json_encode([
             'success' => false,
-            'message' => 'Daily ad watch task completed (5/5)! Resets at midnight tomorrow.'
+            'is_adblock' => true,
+            'message' => '⚠️ Naka-on ang iyong AdBlocker! Paki-disable muna ang AdBlocker o Brave Shields upang ma-claim ang Flow Coins.'
         ]);
         exit;
     }
 
-    $newCount = $currentCount + 1;
-    // 20 coins per ad, with +30 bonus on the 5th ad = 50 coins
-    $earnedCoins = ($newCount === 5) ? 50 : 20;
+    // Strict Sponsor Link Visit Verification Check
+    $challenge = $_SESSION['ad_visit_challenge'] ?? null;
+    if (empty($challenge) || empty($token) || $challenge['token'] !== $token) {
+        echo json_encode([
+            'success' => false,
+            'requires_visit' => true,
+            'message' => '⚠️ Hindi mo pa nabubuksan ang sponsor link! Mangyaring i-click ang button at buksan ang sponsor page bago mag-claim.'
+        ]);
+        exit;
+    }
 
-    $stmt = $pdo->prepare("
-        UPDATE `user_rewards` 
-        SET `coins` = `coins` + ?, 
-            `total_earned` = `total_earned` + ?, 
-            `ads_watched_today` = ?,
-            `last_ad_date` = ? 
-        WHERE `user_id` = ?
-    ");
-    $stmt->execute([$earnedCoins, $earnedCoins, $newCount, $today, $userId]);
+    if (!empty($reqType) && $challenge['type'] !== $reqType) {
+        echo json_encode(['success' => false, 'message' => 'Invalid sponsor challenge type.']);
+        exit;
+    }
 
-    $logDesc = "Daily Ad Watch ({$newCount}/5)" . ($newCount === 5 ? " + Completion Bonus" : "");
-    $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'ad_watch', ?, ?)");
-    $log->execute([$userId, $earnedCoins, $logDesc]);
+    $elapsed = time() - intval($challenge['started_at']);
+    if ($elapsed < 4) {
+        $remaining = max(1, 5 - $elapsed);
+        echo json_encode([
+            'success' => false,
+            'too_fast' => true,
+            'remaining' => $remaining,
+            'message' => "⏳ Paki-antay at tingnan ang sponsor page nang hindi bababa sa 5 segundo bago mag-claim ({$remaining}s natitira)!"
+        ]);
+        exit;
+    }
 
-    $newRow = getUserRewardsRow($pdo, $userId);
-    echo json_encode([
-        'success' => true,
-        'earned_coins' => $earnedCoins,
-        'current_count' => $newCount,
-        'max_count' => 5,
-        'coins' => intval($newRow['coins']),
-        'sponsor_url' => 'https://uplcm.com/4/11983803',
-        'message' => ($newCount === 5) 
-            ? "🎉 Amazing! Completed 5/5 ads! +{$earnedCoins} Coins credited (includes completion bonus)!"
-            : "Watched ad {$newCount}/5! +{$earnedCoins} Flow Coins credited to your balance."
-    ]);
-    exit;
+    $actualType = $challenge['type'];
+    $today = date('Y-m-d');
+
+    if ($actualType === 'sponsor_quest') {
+        if ($rewards['last_sponsor_date'] === $today) {
+            echo json_encode(['success' => false, 'message' => 'Na-claim mo na ang Daily Sponsor Bonus ngayong araw! Magbalik bukas.']);
+            exit;
+        }
+
+        $earnedCoins = 50;
+        $stmt = $pdo->prepare("
+            UPDATE `user_rewards` 
+            SET `coins` = `coins` + ?, 
+                `total_earned` = `total_earned` + ?, 
+                `last_sponsor_date` = ? 
+            WHERE `user_id` = ?
+        ");
+        $stmt->execute([$earnedCoins, $earnedCoins, $today, $userId]);
+
+        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'sponsor_offer', ?, ?)");
+        $log->execute([$userId, $earnedCoins, "Daily Partner Sponsor Exploration (Verified Visit)"]);
+
+        unset($_SESSION['ad_visit_challenge']);
+        $newRow = getUserRewardsRow($pdo, $userId);
+
+        echo json_encode([
+            'success' => true,
+            'earned_coins' => $earnedCoins,
+            'coins' => intval($newRow['coins']),
+            'message' => "🎉 Tagumpay! Nabisita ang partner page at na-credit ang +{$earnedCoins} Flow Coins!"
+        ]);
+        exit;
+
+    } elseif ($actualType === 'watch_ad') {
+        $lastAdDate = $rewards['last_ad_date'] ?? null;
+        $currentCount = ($lastAdDate === $today) ? intval($rewards['ads_watched_today'] ?? 0) : 0;
+
+        if ($currentCount >= 5) {
+            echo json_encode(['success' => false, 'message' => 'Daily ad watch task completed (5/5)! Resets at midnight tomorrow.']);
+            exit;
+        }
+
+        $newCount = $currentCount + 1;
+        $earnedCoins = ($newCount === 5) ? 50 : 20;
+
+        $stmt = $pdo->prepare("
+            UPDATE `user_rewards` 
+            SET `coins` = `coins` + ?, 
+                `total_earned` = `total_earned` + ?, 
+                `ads_watched_today` = ?,
+                `last_ad_date` = ? 
+            WHERE `user_id` = ?
+        ");
+        $stmt->execute([$earnedCoins, $earnedCoins, $newCount, $today, $userId]);
+
+        $logDesc = "Daily Ad Watch ({$newCount}/5)" . ($newCount === 5 ? " + Completion Bonus" : "");
+        $log = $pdo->prepare("INSERT INTO `reward_logs` (`user_id`, `action_type`, `coins`, `description`) VALUES (?, 'ad_watch', ?, ?)");
+        $log->execute([$userId, $earnedCoins, $logDesc]);
+
+        unset($_SESSION['ad_visit_challenge']);
+        $newRow = getUserRewardsRow($pdo, $userId);
+
+        echo json_encode([
+            'success' => true,
+            'earned_coins' => $earnedCoins,
+            'current_count' => $newCount,
+            'max_count' => 5,
+            'coins' => intval($newRow['coins']),
+            'message' => ($newCount === 5) 
+                ? "🎉 Amazing! Completed 5/5 ads! +{$earnedCoins} Coins credited (kasama ang completion bonus)!"
+                : "🎉 Napanood at nabisita ang ad {$newCount}/5! +{$earnedCoins} Flow Coins credited."
+        ]);
+        exit;
+    }
 }
 
 // --- 6. REDEEM MONTHLY PROMO CODE ---
