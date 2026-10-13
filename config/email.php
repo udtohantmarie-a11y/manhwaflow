@@ -9,3 +9,4 @@ return [
     'from_email' => 'manhwaflow.official@gmail.com',
     'from_name'  => 'ManhwaFlow'
 ];
+

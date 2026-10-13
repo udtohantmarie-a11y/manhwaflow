@@ -1,9 +1,13 @@
 <?php
 // reader.php - Dedicated Webtoon & Strip Reader
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/security.php';
+require_once __DIR__ . '/includes/chapters_fallback.php';
 require_once __DIR__ . '/includes/mangadex.php';
 require_once __DIR__ . '/includes/ads.php';
+startSecureSession();
 $pdo = getPdo();
+
 
 $chapterId = isset($_GET['chapter_id']) ? intval($_GET['chapter_id']) : 0;
 $mdChapterId = trim($_GET['md_ch'] ?? '');
@@ -191,15 +195,50 @@ $chapterComments = $commentsStmt->fetchAll();
 // Auto-record in reading history table
 try {
     $userId = $_SESSION['user_id'] ?? null;
-    $userToken = !empty($userId) ? 'user_' . $userId : ($_COOKIE['guest_reader_token'] ?? '');
-    if (empty($userToken)) {
-        $userToken = 'guest_' . bin2hex(random_bytes(16));
-        setcookie('guest_reader_token', $userToken, time() + (86400 * 365), '/');
+    $guestCookie = $_COOKIE['guest_reader_token'] ?? '';
+
+    if (!empty($userId)) {
+        $userToken = 'user_' . $userId;
+        // If user has a guest cookie, migrate any unassigned guest history
+        if (!empty($guestCookie)) {
+            try {
+                // Delete duplicate series from guest token to prevent unique constraint error
+                $pdo->prepare("
+                    DELETE FROM `reading_history` 
+                    WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` IN (
+                        SELECT `series_id` FROM (SELECT `series_id` FROM `reading_history` WHERE `user_id` = ?) AS tmp
+                    )
+                ")->execute([$guestCookie, $userId]);
+
+                // Update remaining guest rows to user_id
+                $pdo->prepare("
+                    UPDATE `reading_history` 
+                    SET `user_id` = ?, `user_token` = ? 
+                    WHERE `user_token` = ? AND `user_id` IS NULL
+                ")->execute([$userId, $userToken, $guestCookie]);
+            } catch (Exception $e) {}
+        }
+    } else {
+        $userToken = !empty($guestCookie) ? $guestCookie : ('guest_' . bin2hex(random_bytes(16)));
+        if (empty($guestCookie)) {
+            setcookie('guest_reader_token', $userToken, [
+                'expires' => time() + (86400 * 365),
+                'path' => '/',
+                'httponly' => true,
+                'samesite' => 'Lax',
+                'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            ]);
+            $_COOKIE['guest_reader_token'] = $userToken;
+        }
     }
 
     $currentReadUrl = $isLive
         ? (BASE_URL . "reader.php?md_ch=" . urlencode($chapter['id']) . "&md_manga=" . urlencode($chapter['manhwa_id']) . "&ch_num=" . urlencode($chapter['chapter_number']))
         : (BASE_URL . "reader.php?chapter_id=" . intval($chapter['id']));
+
+    $seriesIdStr = strval($chapter['manhwa_id']);
+    $seriesTitleStr = strval($chapter['manhwa_title'] ?? 'Webtoon');
+    $resolvedCover = ChaptersFallback::resolveCover($seriesIdStr, $seriesTitleStr, $chapter['cover_image'] ?? '');
 
     $stmtHist = $pdo->prepare("
         INSERT INTO `reading_history` 
@@ -219,15 +258,15 @@ try {
     $stmtHist->execute([
         $userId,
         $userToken,
-        strval($chapter['manhwa_id']),
-        $chapter['manhwa_title'],
-        ChaptersFallback::resolveCover(strval($chapter['manhwa_id']), $chapter['manhwa_title'], $chapter['cover_image']),
+        $seriesIdStr,
+        $seriesTitleStr,
+        $resolvedCover,
         strval($chapter['id']),
         floatval($chapter['chapter_number']),
         $chapter['title'] ?: ('Chapter ' . $chapter['chapter_number']),
         $currentReadUrl
     ]);
-} catch (PDOException $e) {}
+} catch (Throwable $e) {}
 
 $page_title = $chapter['manhwa_title'] . ' - Chapter ' . $chapter['chapter_number'];
 require_once __DIR__ . '/includes/header.php';
@@ -1114,7 +1153,32 @@ async function likeComment(commentId, btnEl) {
     } catch (err) {}
 }
 
-// Reading history is automatically securely saved to the database per user session above.
+// Reading history background client-side sync
+(function syncReadingHistoryClient() {
+    try {
+        const payload = JSON.stringify({
+            series_id: <?= json_encode(strval($chapter['manhwa_id'])) ?>,
+            series_title: <?= json_encode(strval($chapter['manhwa_title'] ?? '')) ?>,
+            cover_image: <?= json_encode(strval($chapter['cover_image'] ?? '')) ?>,
+            chapter_id: <?= json_encode(strval($chapter['id'])) ?>,
+            chapter_number: <?= floatval($chapter['chapter_number']) ?>,
+            chapter_title: <?= json_encode(strval($chapter['title'] ?: ('Chapter ' . $chapter['chapter_number']))) ?>,
+            read_url: window.location.href,
+            scroll_percent: 0
+        });
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('<?= BASE_URL ?>api/history.php?action=save', new Blob([payload], { type: 'application/json' }));
+        } else {
+            fetch('<?= BASE_URL ?>api/history.php?action=save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+    } catch(e) {}
+})();
+
 
 // ==========================================
 // 8. Auto-claim Chapter Reading Flow Coins (On Reading Completion)

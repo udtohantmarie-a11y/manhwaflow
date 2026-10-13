@@ -138,10 +138,11 @@ HTML;
     private static function sendViaSmtp($host, $port, $user, $pass, $fromEmail, $fromName, $toEmail, $subject, $htmlBody, $startTls = false) {
         $errno = 0;
         $errstr = '';
-        $socket = @fsockopen($host, $port, $errno, $errstr, 15);
+        $socket = @fsockopen($host, $port, $errno, $errstr, 4);
         if (!$socket) {
             return ['success' => false, 'error' => "Cannot connect to {$host}:{$port} - {$errstr} ({$errno})"];
         }
+        @stream_set_timeout($socket, 4);
 
         // Helper to read multiline SMTP response
         $readResponse = function() use ($socket) {
@@ -242,3 +243,4 @@ HTML;
         return ['success' => false, 'error' => "Message rejected: {$sendRes}"];
     }
 }
+

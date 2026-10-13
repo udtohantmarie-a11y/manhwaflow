@@ -64,6 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role'] = 'user';
                 $_SESSION['avatar'] = 'default.png';
 
+                // Issue permanent remember-me token (stays logged in forever until manual logout)
+                issuePersistentLoginToken([
+                    'id' => $newId,
+                    'username' => $username,
+                    'email' => $email,
+                    'password' => $hashed,
+                    'role' => 'user',
+                    'avatar' => 'default.png'
+                ]);
+
                 header("Location: " . BASE_URL . "?msg=welcome");
                 exit;
             }

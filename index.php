@@ -1,9 +1,12 @@
 <?php
 // index.php - Official Webtoon & Comic Platform
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/includes/mangadex.php';
 require_once __DIR__ . '/includes/ads.php';
+startSecureSession();
 $pdo = getPdo();
+
 
 $search = isset($_GET['q']) ? trim($_GET['q']) : '';
 $genreSlug = isset($_GET['genre']) ? trim($_GET['genre']) : '';
@@ -75,14 +78,32 @@ $guestToken = $_COOKIE['guest_reader_token'] ?? '';
 $recentHistory = [];
 
 if ($userId) {
+    if (!empty($guestToken)) {
+        try {
+            // Delete duplicate series from guest token to prevent unique constraint error
+            $pdo->prepare("
+                DELETE FROM `reading_history` 
+                WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` IN (
+                    SELECT `series_id` FROM (SELECT `series_id` FROM `reading_history` WHERE `user_id` = ?) AS tmp
+                )
+            ")->execute([$guestToken, $userId]);
+
+            // Migrate remaining guest items to user_id
+            $pdo->prepare("
+                UPDATE `reading_history` 
+                SET `user_id` = ?, `user_token` = ? 
+                WHERE `user_token` = ? AND `user_id` IS NULL
+            ")->execute([$userId, 'user_' . $userId, $guestToken]);
+        } catch (Exception $e) {}
+    }
     try {
         $stmtH = $pdo->prepare("
             SELECT * FROM `reading_history` 
-            WHERE `user_id` = ? 
+            WHERE `user_id` = ? OR `user_token` = ?
             ORDER BY `updated_at` DESC 
             LIMIT 6
         ");
-        $stmtH->execute([$userId]);
+        $stmtH->execute([$userId, 'user_' . $userId]);
         $recentHistory = $stmtH->fetchAll();
     } catch (PDOException $e) {}
 } elseif (!empty($guestToken)) {
@@ -97,6 +118,7 @@ if ($userId) {
         $recentHistory = $stmtH->fetchAll();
     } catch (PDOException $e) {}
 }
+
 
 // Auto-heal recent history covers
 if (!empty($recentHistory)) {

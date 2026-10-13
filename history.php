@@ -1,13 +1,11 @@
 <?php
 // history.php - Reading History & Continue Reading Hub
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/includes/chapters_fallback.php';
 require_once __DIR__ . '/includes/mangadex.php';
+startSecureSession();
 $pdo = getPdo();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 $page_title = 'Reading History';
 require_once __DIR__ . '/includes/header.php';
@@ -32,16 +30,39 @@ try {
 $userId = $_SESSION['user_id'] ?? null;
 $guestCookie = $_COOKIE['guest_reader_token'] ?? '';
 
+// Auto-migrate guest history to logged in user account
+if ($userId) {
+    $userToken = 'user_' . $userId;
+    if (!empty($guestCookie)) {
+        try {
+            // Delete duplicate series from guest token to prevent unique constraint error
+            $pdo->prepare("
+                DELETE FROM `reading_history` 
+                WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` IN (
+                    SELECT `series_id` FROM (SELECT `series_id` FROM `reading_history` WHERE `user_id` = ?) AS tmp
+                )
+            ")->execute([$guestCookie, $userId]);
+
+            // Migrate remaining guest items to user_id
+            $pdo->prepare("
+                UPDATE `reading_history` 
+                SET `user_id` = ?, `user_token` = ? 
+                WHERE `user_token` = ? AND `user_id` IS NULL
+            ")->execute([$userId, $userToken, $guestCookie]);
+        } catch (Exception $e) {}
+    }
+}
+
 $historyItems = [];
 if ($userId) {
     try {
         $stmt = $pdo->prepare("
             SELECT * FROM `reading_history` 
-            WHERE `user_id` = ? 
+            WHERE `user_id` = ? OR `user_token` = ?
             ORDER BY `updated_at` DESC 
             LIMIT 50
         ");
-        $stmt->execute([$userId]);
+        $stmt->execute([$userId, 'user_' . $userId]);
         $historyItems = $stmt->fetchAll();
     } catch (PDOException $e) {}
 } elseif (!empty($guestCookie)) {
@@ -56,6 +77,7 @@ if ($userId) {
         $historyItems = $stmt->fetchAll();
     } catch (PDOException $e) {}
 }
+
 
 // Universal auto-heal for reading_history covers
 foreach ($historyItems as &$hi) {

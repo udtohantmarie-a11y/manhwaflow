@@ -1,9 +1,13 @@
 <?php
 // manhwa.php - Manhwa Details & Chapter List
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/security.php';
+require_once __DIR__ . '/includes/chapters_fallback.php';
 require_once __DIR__ . '/includes/mangadex.php';
 require_once __DIR__ . '/includes/ads.php';
+startSecureSession();
 $pdo = getPdo();
+
 
 $rawId = $_GET['id'] ?? ($_GET['md_id'] ?? '');
 $slug = isset($_GET['slug']) ? trim($_GET['slug']) : '';
@@ -204,13 +208,24 @@ $guestCookie = $_COOKIE['guest_reader_token'] ?? '';
 $lastReadChapter = null;
 
 if ($userId) {
+    // If user has a guest cookie, migrate any unassigned guest history
+    if (!empty($guestCookie)) {
+        try {
+            $pdo->prepare("
+                UPDATE `reading_history` 
+                SET `user_id` = ?, `user_token` = ? 
+                WHERE `user_token` = ? AND `user_id` IS NULL
+            ")->execute([$userId, 'user_' . $userId, $guestCookie]);
+        } catch (Exception $e) {}
+    }
+
     try {
         $stmtHist = $pdo->prepare("
             SELECT * FROM `reading_history` 
-            WHERE `user_id` = ? AND `series_id` = ? 
+            WHERE (`user_id` = ? OR `user_token` = ?) AND `series_id` = ? 
             LIMIT 1
         ");
-        $stmtHist->execute([$userId, strval($manhwa['id'])]);
+        $stmtHist->execute([$userId, 'user_' . $userId, strval($manhwa['id'])]);
         $lastReadChapter = $stmtHist->fetch();
     } catch (PDOException $e) {}
 } elseif (!empty($guestCookie)) {
@@ -224,6 +239,7 @@ if ($userId) {
         $lastReadChapter = $stmtHist->fetch();
     } catch (PDOException $e) {}
 }
+
 
 $page_title = $manhwa['title'] . ' - Read Chapters Free';
 require_once __DIR__ . '/includes/header.php';

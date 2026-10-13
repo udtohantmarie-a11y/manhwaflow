@@ -5,9 +5,8 @@ require_once __DIR__ . '/includes/chapters_fallback.php';
 require_once __DIR__ . '/includes/mangadex.php';
 $pdo = getPdo();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/includes/security.php';
+startSecureSession();
 
 $isLoggedIn = isset($_SESSION['user_id']);
 $userId = $isLoggedIn ? intval($_SESSION['user_id']) : 0;

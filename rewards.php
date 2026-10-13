@@ -3,9 +3,8 @@
 require_once __DIR__ . '/config/db.php';
 $pdo = getPdo();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/includes/security.php';
+startSecureSession();
 
 $userId = $_SESSION['user_id'] ?? null;
 $redeemAlert = null;

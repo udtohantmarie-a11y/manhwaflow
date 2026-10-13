@@ -45,15 +45,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['avatar'] = $user['avatar'];
 
+                // Issue permanent remember-me token (stays logged in forever until manual logout)
+                issuePersistentLoginToken($user);
+
                 // Migrate guest reading history to logged-in user account
                 $guestToken = $_COOKIE['guest_reader_token'] ?? '';
                 if (!empty($guestToken)) {
                     try {
+                        // Delete duplicate series from guest token to prevent unique constraint error
+                        $pdo->prepare("
+                            DELETE FROM `reading_history` 
+                            WHERE `user_token` = ? AND `user_id` IS NULL AND `series_id` IN (
+                                SELECT `series_id` FROM (SELECT `series_id` FROM `reading_history` WHERE `user_id` = ?) AS tmp
+                            )
+                        ")->execute([$guestToken, $user['id']]);
+
                         $pdo->prepare("UPDATE `reading_history` SET `user_id` = ?, `user_token` = ? WHERE `user_token` = ? AND `user_id` IS NULL")
                             ->execute([$user['id'], 'user_' . $user['id'], $guestToken]);
                     } catch (Exception $e) {}
                     setcookie('guest_reader_token', '', time() - 3600, '/');
                 }
+
 
                 // Open redirect prevention
                 $redirectParam = $_GET['redirect'] ?? '';
