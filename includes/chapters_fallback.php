@@ -51,6 +51,25 @@ class ChaptersFallback {
         'a603952f-8706-444f-8367-73b37996c568' => '01J76XYB7A985W3P3K887X9375'  // Damn Reincarnation (starts at 1, 80+ ch)
     ];
 
+    // Direct Pre-mappings for Webdex Scans
+    public static $webdexMap = [
+        '5ab8abc4-9820-4139-bdbe-c5ba91af1466' => 'the-summoner-apocalypse-rewinds',
+        '6fc653be-d90f-4dde-a0a6-018804d6853c' => 'super-god-card-maker21',
+        '3bca85e3-e5db-4535-9556-8d1f1baa1591' => 'my-battleship-can-be-upgraded21',
+        '875412f6-45e3-4bd5-950a-8fcb038b8dc4' => 'the-lone-sss-class-summoner21',
+        '95c773c2-47e8-4e1e-9dd8-36ca1cff70a9' => 'terror-hunter21',
+        '6db4e36b-8281-4288-a7a8-660299289647' => 'mechanical-master21',
+        'de606e15-162e-4ed6-af2f-9a55b9a3a1c7' => 'dream-master21',
+        'ecde600c-af29-43e7-9049-4649c73d6f08' => 'battle-armor-academy21',
+        '29d477df-76a0-4cce-a6fd-9a083b6e7610' => 'nine-star-hegemon-body-art',
+        '62919926-5c94-492e-a0d9-49200a5e2697' => 'with-my-netherworld-trillions-game-on14',
+        'f20b1312-6136-4f96-ba24-aee32bfe65a4' => 'god-of-games-the-ultimate-evolution21',
+        'a9136474-c305-4870-8c56-7ba280814cce' => 'the-great-path21',
+        '71424f75-76bf-4de0-b69f-abbfaa670bbf' => 'super-gene21',
+        '05fc1afe-0684-4b9d-9109-3dcdb0586b9f' => 'i-really-dont-want-to-remake21'
+    ];
+
+
     /**
      * Check cached dynamic series mappings
      */
@@ -60,6 +79,9 @@ class ChaptersFallback {
         }
         if (isset(self::$asuraMap[$mangaId])) {
             return ['type' => 'asura', 'id' => self::$asuraMap[$mangaId]];
+        }
+        if (isset(self::$webdexMap[$mangaId])) {
+            return ['type' => 'webdex', 'id' => self::$webdexMap[$mangaId]];
         }
 
         $mapFile = self::CACHE_DIR . '/series_mappings.json';
@@ -171,6 +193,8 @@ class ChaptersFallback {
                 $chList = self::getAnisaChapters($mapping['id'], $limit);
             } elseif ($mapping['type'] === 'athrea') {
                 $chList = self::getAthreaChapters($mapping['id'], $limit);
+            } elseif ($mapping['type'] === 'webdex') {
+                $chList = self::getWebdexChapters($mapping['id'], $limit);
             }
             if (!empty($chList)) return $chList;
             // Clean up invalid or stale dynamic mapping
@@ -231,6 +255,21 @@ class ChaptersFallback {
                 if (!empty($chapters)) {
                     self::saveMapping($mangaId, 'athrea', $athreaSlug);
                     return $chapters;
+                }
+            }
+
+            // E. Search Webdex Scans (Action, Rebirth, Urban, Cultivation)
+            $webdexMatches = self::searchWebdex($titleToSearch, 5);
+            if (!empty($webdexMatches)) {
+                foreach ($webdexMatches as $wm) {
+                    if (self::isTitleMatch($titleToSearch, $wm['title']) || self::isTitleMatch($mangaTitle, $wm['title'])) {
+                        $webdexSlug = $wm['slug'];
+                        $chapters = self::getWebdexChapters($webdexSlug, $limit);
+                        if (!empty($chapters)) {
+                            self::saveMapping($mangaId, 'webdex', $webdexSlug);
+                            return $chapters;
+                        }
+                    }
                 }
             }
         }
@@ -1230,6 +1269,380 @@ class ChaptersFallback {
     }
 
     /**
+     * Resolve Webdex Cover URLs (CDN / relative WP uploads)
+     */
+    public static function resolveWebdexCover($rawCover) {
+        if (empty($rawCover)) return 'https://placehold.co/300x420/161625/8b5cf6?text=Webdex';
+        if (str_starts_with($rawCover, 'http')) return $rawCover;
+        $clean = preg_replace('/^\/?wp-content\/uploads\//i', '', ltrim($rawCover, '/'));
+        return self::WEBDEX_CDN_BASE . '/' . $clean;
+    }
+
+    /**
+     * Resolve Webdex Chapter Page Image URLs
+     */
+    public static function resolveWebdexImage($rawImage) {
+        if (empty($rawImage)) return '';
+        if (str_starts_with($rawImage, 'http')) return $rawImage;
+        $clean = preg_replace('/^\/?wp-content\/uploads\//i', '', ltrim($rawImage, '/'));
+        return self::WEBDEX_CDN_BASE . '/' . $clean;
+    }
+
+    /**
+     * Webdex Scans Supabase REST API Client with caching
+     */
+    public static function webdexApiRequest($endpoint, $cacheTtl = 14400) {
+        if (!is_dir(self::CACHE_DIR)) {
+            @mkdir(self::CACHE_DIR, 0777, true);
+        }
+
+        $cacheKey = md5($endpoint);
+        $cacheFile = self::CACHE_DIR . "/webdex_api_{$cacheKey}.json";
+
+        if ($cacheTtl > 0 && file_exists($cacheFile) && (time() - filemtime($cacheFile) < $cacheTtl)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $url = self::WEBDEX_API_BASE . '/' . ltrim($endpoint, '/');
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "apikey: " . self::WEBDEX_ANON_KEY,
+            "Authorization: Bearer " . self::WEBDEX_ANON_KEY,
+            "Accept: application/json"
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code !== 200 || !$res) {
+            if (file_exists($cacheFile)) {
+                return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            }
+            return [];
+        }
+
+        $data = json_decode($res, true);
+        if ($data !== null && $cacheTtl > 0) {
+            @file_put_contents($cacheFile, $res);
+        }
+
+        return $data ?: [];
+    }
+
+    /**
+     * Get directory listing of Webdex Scans series
+     */
+    public static function getWebdexDirectory($limit = 60) {
+        $cacheFile = self::CACHE_DIR . "/webdex_directory.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 14400)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return array_slice($cached, 0, $limit);
+        }
+
+        $rawList = self::webdexApiRequest('series?select=*,series_genres(genres(*))&order=updated_at.desc&limit=' . intval($limit), 14400);
+        if (empty($rawList)) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $items = [];
+        foreach ($rawList as $s) {
+            $slug = trim($s['slug'] ?? '');
+            if (empty($slug)) continue;
+
+            $genres = [];
+            if (!empty($s['series_genres'])) {
+                foreach ($s['series_genres'] as $sg) {
+                    if (!empty($sg['genres']['name'])) {
+                        $genres[] = $sg['genres']['name'];
+                    }
+                }
+            }
+            if (empty($genres)) {
+                $genres = ['Action', 'Fantasy', 'Manhua'];
+            }
+
+            $cover = self::resolveWebdexCover($s['cover_url'] ?? '');
+            $status = ucfirst(strtolower($s['status'] ?? 'Ongoing'));
+            if ($status === 'Cancelled') $status = 'Completed';
+
+            $type = ucfirst(strtolower($s['type'] ?? 'Manhua'));
+            if ($type !== 'Manhwa' && $type !== 'Manga') $type = 'Manhua';
+
+            $rating = !empty($s['rating']) ? number_format(floatval($s['rating']), 1) : '4.9';
+
+            $items[] = [
+                'id' => "webdex_{$slug}",
+                'uuid' => $s['id'] ?? '',
+                'slug' => $slug,
+                'title' => trim($s['title'] ?? 'Untitled'),
+                'cover_url' => $cover,
+                'status' => $status,
+                'type' => $type,
+                'rating' => $rating,
+                'tags' => $genres,
+                'synopsis' => $s['description'] ?? 'Read online at ManhwaFlow.',
+                'latest_chapter' => 'Latest',
+                'views' => intval($s['view_count'] ?? rand(5000, 45000))
+            ];
+        }
+
+        if (!empty($items)) {
+            @file_put_contents($cacheFile, json_encode($items));
+        }
+
+        return array_slice($items, 0, $limit);
+    }
+
+    /**
+     * Get detailed metadata for a Webdex Scans series by slug
+     */
+    public static function getWebdexDetails($slug) {
+        $slug = trim(preg_replace('/^webdex_/', '', $slug));
+        $cacheFile = self::CACHE_DIR . "/webdex_details_{$slug}.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 43200)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $endpoint = 'series?slug=eq.' . urlencode($slug) . '&select=*,series_genres(genres(*))';
+        $res = self::webdexApiRequest($endpoint, 43200);
+
+        if (empty($res)) {
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $slug)) {
+                $endpoint = 'series?id=eq.' . urlencode($slug) . '&select=*,series_genres(genres(*))';
+                $res = self::webdexApiRequest($endpoint, 43200);
+            }
+        }
+
+        if (empty($res) || empty($res[0])) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: null;
+            $title = ucwords(str_replace(['-', '_'], ' ', $slug));
+            return [
+                'id' => "webdex_{$slug}",
+                'slug' => $slug,
+                'title' => $title,
+                'cover_url' => 'https://placehold.co/300x420/161625/8b5cf6?text=' . urlencode($title),
+                'synopsis' => 'Read this trending webtoon series online on ManhwaFlow with official high-definition chapters.',
+                'genres' => ['Action', 'Fantasy', 'Manhua'],
+                'status' => 'Ongoing',
+                'author' => 'Webtoon Studio',
+                'artist' => 'Webtoon Studio',
+                'type' => 'Manhua',
+                'rating' => '4.9'
+            ];
+        }
+
+        $s = $res[0];
+        $genres = [];
+        if (!empty($s['series_genres'])) {
+            foreach ($s['series_genres'] as $sg) {
+                if (!empty($sg['genres']['name'])) {
+                    $genres[] = $sg['genres']['name'];
+                }
+            }
+        }
+        if (empty($genres)) {
+            $genres = ['Action', 'Fantasy', 'Manhua'];
+        }
+
+        $cover = self::resolveWebdexCover($s['cover_url'] ?? '');
+        $status = ucfirst(strtolower($s['status'] ?? 'Ongoing'));
+        if ($status === 'Cancelled') $status = 'Completed';
+
+        $type = ucfirst(strtolower($s['type'] ?? 'Manhua'));
+        if ($type !== 'Manhwa' && $type !== 'Manga') $type = 'Manhua';
+
+        $rating = !empty($s['rating']) ? number_format(floatval($s['rating']), 1) : '4.9';
+
+        $author = trim($s['author'] ?? '');
+        if (empty($author) || stripos($author, 'scans') !== false) {
+            $author = 'Webtoon Studio';
+        }
+        $artist = trim($s['artist'] ?? '');
+        if (empty($artist) || stripos($artist, 'scans') !== false) {
+            $artist = $author;
+        }
+
+        $details = [
+            'id' => "webdex_{$slug}",
+            'uuid' => $s['id'] ?? '',
+            'slug' => $slug,
+            'title' => trim($s['title'] ?? ucwords(str_replace('-', ' ', $slug))),
+            'cover_url' => $cover,
+            'banner_image' => $cover,
+            'synopsis' => !empty($s['description']) ? trim($s['description']) : 'Read online at ManhwaFlow with official HD chapters.',
+            'genres' => $genres,
+            'status' => $status,
+            'author' => $author,
+            'artist' => $artist,
+            'type' => $type,
+            'rating' => $rating,
+            'views' => intval($s['view_count'] ?? rand(10000, 85000))
+        ];
+
+        @file_put_contents($cacheFile, json_encode($details));
+        return $details;
+    }
+
+    /**
+     * Get chapters list for a Webdex Scans series
+     */
+    public static function getWebdexChapters($slug, $limit = 1000) {
+        $slug = trim(preg_replace('/^webdex_/', '', $slug));
+        $cacheFile = self::CACHE_DIR . "/fallback_webdex_{$slug}_chapters.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 14400)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return array_slice($cached, 0, $limit);
+        }
+
+        $details = self::getWebdexDetails($slug);
+        $seriesUuid = $details['uuid'] ?? '';
+
+        if (empty($seriesUuid)) {
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $slug)) {
+                $seriesUuid = $slug;
+            }
+        }
+
+        if (empty($seriesUuid)) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $endpoint = 'chapters?series_id=eq.' . urlencode($seriesUuid) . '&select=id,chapter_number,title,slug,page_count,created_at&order=chapter_number.desc&limit=' . intval($limit);
+        $rawChapters = self::webdexApiRequest($endpoint, 14400);
+
+        if (empty($rawChapters)) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $chapters = [];
+        foreach ($rawChapters as $ch) {
+            $chId = trim($ch['id'] ?? '');
+            if (empty($chId)) continue;
+
+            $chNum = floatval($ch['chapter_number'] ?? 0);
+            $chTitle = trim($ch['title'] ?? '');
+            if (empty($chTitle)) {
+                $chTitle = "Chapter " . $chNum;
+            }
+
+            $chapters[] = [
+                'id' => "webdex_{$slug}_ch_{$chId}",
+                'chapter_id' => $chId,
+                'chapter_number' => $chNum,
+                'title' => $chTitle,
+                'pages' => intval($ch['page_count'] ?? 20),
+                'language' => 'en',
+                'externalUrl' => null,
+                'created_at' => substr($ch['created_at'] ?? date('Y-m-d'), 0, 10)
+            ];
+        }
+
+        if (!empty($chapters)) {
+            @file_put_contents($cacheFile, json_encode($chapters));
+        }
+
+        return array_slice($chapters, 0, $limit);
+    }
+
+    /**
+     * Get Chapter Pages for a Webdex Scans chapter
+     */
+    public static function getWebdexPages($slug, $chapterUuid) {
+        $chapterUuid = trim($chapterUuid);
+        $cacheFile = self::CACHE_DIR . "/fallback_webdex_ch_{$chapterUuid}_pages.json";
+        if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < 86400)) {
+            $cached = json_decode(@file_get_contents($cacheFile), true);
+            if (!empty($cached)) return $cached;
+        }
+
+        $endpoint = 'pages?chapter_id=eq.' . urlencode($chapterUuid) . '&select=page_number,image_url&order=page_number.asc';
+        $rawPages = self::webdexApiRequest($endpoint, 86400);
+
+        if (empty($rawPages)) {
+            if (file_exists($cacheFile)) return json_decode(@file_get_contents($cacheFile), true) ?: [];
+            return [];
+        }
+
+        $pageUrls = [];
+        foreach ($rawPages as $p) {
+            $img = self::resolveWebdexImage($p['image_url'] ?? '');
+            if (!empty($img)) {
+                $pageUrls[] = $img;
+            }
+        }
+
+        if (!empty($pageUrls)) {
+            @file_put_contents($cacheFile, json_encode($pageUrls));
+        }
+
+        return $pageUrls;
+    }
+
+    /**
+     * Search Webdex Scans series
+     */
+    public static function searchWebdex($query, $limit = 20) {
+        $query = trim($query);
+        if (empty($query)) return [];
+
+        $all = self::getWebdexDirectory(60);
+        $results = [];
+        foreach ($all as $item) {
+            if (stripos($item['title'], $query) !== false || stripos($item['slug'], $query) !== false) {
+                $results[] = $item;
+            }
+        }
+        return array_slice($results, 0, $limit);
+    }
+
+    /**
+     * Paged Webdex library for index.php
+     */
+    public static function getWebdexPaged($page = 1, $limit = 30, $search = '', $genreSlug = '') {
+        $all = self::getWebdexDirectory(60);
+
+        if (!empty($search)) {
+            $all = array_values(array_filter($all, function($item) use ($search) {
+                return stripos($item['title'], $search) !== false || stripos($item['slug'], $search) !== false;
+            }));
+        }
+
+        if (!empty($genreSlug)) {
+            $normGenre = strtolower(str_replace('-', ' ', $genreSlug));
+            $all = array_values(array_filter($all, function($item) use ($normGenre) {
+                if (empty($item['tags'])) return false;
+                foreach ($item['tags'] as $t) {
+                    if (stripos(strtolower($t), $normGenre) !== false) return true;
+                }
+                return false;
+            }));
+        }
+
+        $total = count($all);
+        $totalPages = max(1, ceil($total / $limit));
+        $offset = ($page - 1) * $limit;
+        $items = array_slice($all, $offset, $limit);
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'total_pages' => $totalPages,
+            'page' => $page
+        ];
+    }
+
+    /**
      * Unified Exclusive Spotlight: Top trending webtoons from multiple sources
      * Neutral presentation with no 3rd-party source mentions.
      */
@@ -1377,6 +1790,18 @@ class ChaptersFallback {
             ]
         ];
 
+        // Also merge dynamic titles from Webdex directory
+        $webdexLive = self::getWebdexDirectory(15);
+        foreach ($webdexLive as $wl) {
+            $exists = false;
+            foreach ($curatedList as $cl) {
+                if ($cl['id'] === $wl['id'] || $cl['slug'] === $wl['slug']) { $exists = true; break; }
+            }
+            if (!$exists) {
+                $curatedList[] = $wl;
+            }
+        }
+
         // Also merge dynamic titles from Athrea directory if needed
         $athreaLive = self::getAthreaDirectory(10);
         foreach ($athreaLive as $al) {
@@ -1493,6 +1918,14 @@ class ChaptersFallback {
             return [];
         }
 
+        // --- 5. Webdex Scans Chapter Images ---
+        if (str_starts_with($chapterId, 'webdex_')) {
+            if (preg_match('/^webdex_(.+)_ch_(.+)$/', $chapterId, $matches)) {
+                return self::getWebdexPages($matches[1], $matches[2]);
+            }
+            return [];
+        }
+
         // --- 4. Athrea Scans Chapter Images ---
         if (str_starts_with($chapterId, 'athrea_')) {
             if (preg_match('/^athrea_(.+)_ch_(.+)$/', $chapterId, $matches)) {
@@ -1522,7 +1955,7 @@ class ChaptersFallback {
 
         $seriesId = trim($seriesId);
         $title = trim($title);
-        $slug = preg_replace('/^(anisa_|asura_|athrea_)/', '', $seriesId);
+        $slug = preg_replace('/^(anisa_|asura_|athrea_|webdex_)/', '', $seriesId);
 
         // 1. Direct verified CDN mappings for known series
         $knownDirect = [
@@ -1591,6 +2024,14 @@ class ChaptersFallback {
                 if (!empty($details['cover_url'])) {
                     return $details['cover_url'];
                 }
+            }
+        }
+
+        // 3.5. Webdex lookup
+        if (str_starts_with($seriesId, 'webdex_')) {
+            $webdexData = self::getWebdexDetails($slug);
+            if (!empty($webdexData['cover_url'])) {
+                return $webdexData['cover_url'];
             }
         }
 

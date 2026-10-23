@@ -503,7 +503,14 @@ class MangaDexAPI {
         $needsFallback = ($startsLate || $hasZeroHosted || $isSparse || !empty($existingMapping));
 
         if ($needsFallback) {
-            $fallbackList = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle);
+            $altTitle = '';
+            if (empty($mDetails)) {
+                $mDetails = self::getMangaDetailsLive($mangaId);
+            }
+            if (!empty($mDetails['alt_title'])) {
+                $altTitle = $mDetails['alt_title'];
+            }
+            $fallbackList = ChaptersFallback::getChapters($mangaId, $limit, $mangaTitle, $altTitle);
             if (!empty($fallbackList)) {
                 if ($hasZeroHosted) {
                     return $fallbackList;
