@@ -276,7 +276,7 @@ function renderGuestBookmarksView() {
     let listChanged = false;
     list.forEach(item => {
         const sId = String(item.id || item.series_id || '');
-        const cleanId = sId.replace(/^(anisa_|asura_|athrea_)/, '');
+        const cleanId = sId.replace(/^(anisa_|asura_|athrea_|webdex_)/, '');
         let sCover = item.cover_image || item.cover || '';
         if (!sCover || sCover.includes('anisascans.in') || sCover.includes('placeholder.svg') || sCover.includes('placehold.co')) {
             if (KNOWN_GUEST_COVERS[sId]) {

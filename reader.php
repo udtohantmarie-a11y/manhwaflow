@@ -23,7 +23,19 @@ $backUrl = BASE_URL;
 
 if ($isLive) {
     // --- LIVE MANGADEX STREAMING & FALLBACK ---
-    if (str_starts_with($mdMangaId, 'athrea_')) {
+    if (str_starts_with($mdMangaId, 'webdex_')) {
+        require_once __DIR__ . '/includes/chapters_fallback.php';
+        $webdexSlug = substr($mdMangaId, 7);
+        $mangaDetails = ChaptersFallback::getWebdexDetails($webdexSlug);
+        $liveChapters = ChaptersFallback::getWebdexChapters($webdexSlug, 1000);
+        $coverUrl = ChaptersFallback::resolveCover($mdMangaId, $mangaDetails['title'] ?? '', $mangaDetails['cover_url'] ?? '');
+
+        $manga = [
+            'id' => $mdMangaId,
+            'title' => $mangaDetails['title'] ?? 'Webtoon Series',
+            'cover_url' => $coverUrl
+        ];
+    } elseif (str_starts_with($mdMangaId, 'athrea_')) {
         require_once __DIR__ . '/includes/chapters_fallback.php';
         $athreaSlug = substr($mdMangaId, 7);
         $mangaDetails = ChaptersFallback::getAthreaDetails($athreaSlug);
@@ -110,7 +122,7 @@ if ($isLive) {
     $pageUrls = MangaDexAPI::getChapterPagesLive($mdChapterId, true);
     foreach ($pageUrls as $pIndex => $pUrl) {
         $imgSrc = $pUrl;
-        if (strpos($pUrl, 'mangadex.network') !== false || strpos($pUrl, 'mangadex.org') !== false || strpos($pUrl, 'athreascans.com') !== false || strpos($pUrl, 'anisascans.in') !== false || strpos($pUrl, 'mgread.io') !== false || strpos($pUrl, 'asurascans.com') !== false) {
+        if (strpos($pUrl, 'mangadex.network') !== false || strpos($pUrl, 'mangadex.org') !== false || strpos($pUrl, 'athreascans.com') !== false || strpos($pUrl, 'anisascans.in') !== false || strpos($pUrl, 'mgread.io') !== false || strpos($pUrl, 'asurascans.com') !== false || strpos($pUrl, 'webdexscans.com') !== false) {
             $imgSrc = BASE_URL . 'api/image_proxy.php?url=' . urlencode($pUrl);
         }
         $pages[] = [

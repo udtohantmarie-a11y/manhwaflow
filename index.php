@@ -60,8 +60,15 @@ $featuredSpotlight = ChaptersFallback::getExclusiveSpotlight(12);
 
 // Fetch items directly from real-time library with pagination
 $pagedResult = [];
-if (!empty($search)) {
+if ($sourceFilter === 'webdex') {
+    $pagedResult = ChaptersFallback::getWebdexPaged($page, $limit, $search, $genreSlug);
+} elseif (!empty($search)) {
     $pagedResult = MangaDexAPI::searchPaged($search, $limit, $page, $typeFilter);
+    $webdexMatches = ($page === 1) ? ChaptersFallback::searchWebdex($search, 10) : [];
+    if (!empty($webdexMatches)) {
+        $pagedResult['items'] = array_merge($webdexMatches, $pagedResult['items'] ?? []);
+        $pagedResult['total'] = ($pagedResult['total'] ?? 0) + count($webdexMatches);
+    }
 } elseif (!empty($genreSlug)) {
     $pagedResult = MangaDexAPI::getByGenrePaged($genreSlug, $limit, $page, $typeFilter);
 } else {
@@ -302,10 +309,15 @@ require_once __DIR__ . '/includes/header.php';
                        class="px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $typeFilter === 'manhua' ? 'bg-emerald-600 text-white shadow-md' : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750' ?>">
                         <span>🇨🇳 Manhua</span>
                     </a>
+                    <a href="<?= getPageUrl(1, $search, $genreSlug, $typeFilter, $sourceFilter === 'webdex' ? '' : 'webdex') ?>" 
+                       class="px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 <?= $sourceFilter === 'webdex' ? 'bg-amber-500 text-dark-950 font-black shadow-md shadow-amber-500/20' : 'bg-dark-850 hover:bg-dark-800 text-amber-400 border border-dark-750' ?>">
+                        <i class="fa-solid fa-bolt text-xs"></i>
+                        <span>Webdex Scans</span>
+                    </a>
                 </div>
             </div>
 
-            <?php if (!empty($genreSlug) || !empty($search) || !empty($typeFilter)): ?>
+            <?php if (!empty($genreSlug) || !empty($search) || !empty($typeFilter) || !empty($sourceFilter)): ?>
                 <a href="<?= BASE_URL ?>" class="text-xs text-brand-400 hover:text-brand-300 font-semibold self-start sm:self-auto">
                     <i class="fa-solid fa-rotate-left mr-1"></i> Clear Filters
                 </a>
@@ -406,6 +418,8 @@ require_once __DIR__ . '/includes/header.php';
                     <span class="w-2.5 h-6 rounded-full bg-brand-500"></span>
                     <?php if (!empty($search)): ?>
                         Search Results for: "<span class="text-brand-400"><?= htmlspecialchars($search) ?></span>"
+                    <?php elseif ($sourceFilter === 'webdex'): ?>
+                        ⚡ Webdex Scans Releases &amp; Catalog
                     <?php elseif (!empty($genreSlug)): ?>
                         Genre: <span class="text-brand-400"><?= htmlspecialchars(ucwords(str_replace('-', ' ', $genreSlug))) ?></span>
                     <?php elseif (!empty($typeFilter)): ?>

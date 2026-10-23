@@ -6,6 +6,9 @@ class ChaptersFallback {
     const WC_BASE = 'https://weebcentral.com';
     const ANISA_BASE = 'https://anisascans.in';
     const ATHREA_BASE = 'https://athreascans.com';
+    const WEBDEX_API_BASE = 'https://apidb.webdexscans.com/rest/v1';
+    const WEBDEX_CDN_BASE = 'https://cdn.webdexscans.com';
+    const WEBDEX_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMzI5NzkxLCJleHAiOjE5NTAwMDk3OTF9.ub3n4yzBgZ1madOiy7R_QE5yOLRJISh8-C_wa0Ud8mQ';
     const CACHE_DIR = __DIR__ . '/../cache';
 
     // Direct Pre-mappings for Asura Scans (Murim & Hot Action scanlations)

@@ -36,7 +36,9 @@ $allowedHosts = [
     'anisascans.in',
     'athreascans.com',
     'mgread.io',
-    'like.mgread.io'
+    'like.mgread.io',
+    'webdexscans.com',
+    'cdn.webdexscans.com'
 ];
 
 foreach ($allowedHosts as $allowed) {

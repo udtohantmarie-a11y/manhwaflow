@@ -18,11 +18,15 @@ $genres = [];
 $chapters = [];
 $relatedManhwas = [];
 
-if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || str_starts_with($rawId, 'anisa_')) {
-    // --- MULTI-SOURCE WEBTOON LIVE MODE (ATHREA, ASURA, ANISA) ---
+if (str_starts_with($rawId, 'webdex_') || str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || str_starts_with($rawId, 'anisa_')) {
+    // --- MULTI-SOURCE WEBTOON LIVE MODE (WEBDEX, ATHREA, ASURA, ANISA) ---
     require_once __DIR__ . '/includes/chapters_fallback.php';
     
-    if (str_starts_with($rawId, 'athrea_')) {
+    if (str_starts_with($rawId, 'webdex_')) {
+        $sourceSlug = substr($rawId, 7);
+        $sourceData = ChaptersFallback::getWebdexDetails($sourceSlug);
+        $liveChapters = ChaptersFallback::getWebdexChapters($sourceSlug, 1000);
+    } elseif (str_starts_with($rawId, 'athrea_')) {
         $sourceSlug = substr($rawId, 7);
         $sourceData = ChaptersFallback::getAthreaDetails($sourceSlug);
         $liveChapters = ChaptersFallback::getAthreaChapters($sourceSlug, 1000);
@@ -41,7 +45,7 @@ if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || s
     }
 
     $cleanAuthor = $sourceData['author'] ?? 'Webtoon Studio';
-    if (stripos($cleanAuthor, 'scans') !== false || stripos($cleanAuthor, 'asura') !== false || stripos($cleanAuthor, 'athrea') !== false || stripos($cleanAuthor, 'anisa') !== false) {
+    if (stripos($cleanAuthor, 'scans') !== false || stripos($cleanAuthor, 'asura') !== false || stripos($cleanAuthor, 'athrea') !== false || stripos($cleanAuthor, 'anisa') !== false || stripos($cleanAuthor, 'webdex') !== false) {
         $cleanAuthor = 'Webtoon Studio';
     }
 
@@ -67,7 +71,7 @@ if (str_starts_with($rawId, 'athrea_') || str_starts_with($rawId, 'asura_') || s
     ];
 
     foreach ($sourceData['genres'] as $idx => $t) {
-        if (stripos($t, 'scans') !== false || stripos($t, 'athrea') !== false || stripos($t, 'asura') !== false || stripos($t, 'anisa') !== false) {
+        if (stripos($t, 'scans') !== false || stripos($t, 'athrea') !== false || stripos($t, 'asura') !== false || stripos($t, 'anisa') !== false || stripos($t, 'webdex') !== false) {
             continue;
         }
         $genres[] = [
